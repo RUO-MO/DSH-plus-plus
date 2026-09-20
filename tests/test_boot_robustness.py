@@ -159,17 +159,38 @@ const prefetch = Promise.allSettled([
 
 
 class TokenUsageWarmFlag(unittest.TestCase):
+    """token 用量预热的健壮性契约。
+
+    ⚠️ CI 注意：`blocking=True` 会走真实聚合（`session_store.aggregate_token_usage()`），
+    而 GitHub runner 上没有 DSH 环境、更没有会话目录，会抛
+    RuntimeError('未找到会话目录...')。所以这里统一**桩掉聚合器**，
+    注入固定假数据 —— 本类验证的是「缓存/预热/字段契约」，
+    不是「聚合算法」，桩掉反而让断言更精准、且不依赖本机环境。
+    """
+
+    FAKE = {
+        'totalTokens': 1234, 'turns': 7, 'days': ['2026-09-20'],
+        'hours': [0] * 24, 'models': ['deepseek-chat'],
+        'dayModels': {}, 'modelTokens': {'deepseek-chat': 1234},
+        'hoursToday': [0] * 24,
+    }
+
     def setUp(self):
         sys.path.insert(0, ROOT)
         import server
+        import session_store
         self.server = server
+        self.session_store = session_store
         self._saved = dict(server._TOKEN_USAGE_CACHE)
         self._saved_warm = server._TOKEN_USAGE_WARMING
+        self._saved_agg = session_store.aggregate_token_usage
+        session_store.aggregate_token_usage = lambda: dict(self.FAKE)
 
     def tearDown(self):
         s = self.server
         s._TOKEN_USAGE_CACHE.update(self._saved)
         s._TOKEN_USAGE_WARMING = self._saved_warm
+        self.session_store.aggregate_token_usage = self._saved_agg
 
     def test_warmup_declares_global(self):
         """_token_usage_warmup 必须声明 global，否则模块级 warming 永不更新。"""
@@ -202,6 +223,30 @@ class TokenUsageWarmFlag(unittest.TestCase):
         # 必须包含聚合器的全部字段（前端 tuStatsFromHost 依赖它们）
         for k in ('totalTokens', 'turns', 'days', 'hours', 'models'):
             self.assertIn(k, v, '阻塞路径缺少字段 %s' % k)
+
+    def test_blocking_survives_missing_session_dir(self):
+        """无 DSH 会话目录时（CI runner）不应抛异常，须优雅降级。
+
+        这是 2026-09-20 CI 假红的第二个坑：本机有会话数据所以本地全绿，
+        runner 上没有 → RuntimeError 直接让整套失败。
+        """
+        s = self.server
+
+        def _boom():
+            raise RuntimeError('未找到会话目录（DSH home 未解析或尚未产生会话）')
+
+        self.session_store.aggregate_token_usage = _boom
+        s._TOKEN_USAGE_CACHE.update({'key': None, 'value': None, 'ts': 0.0})
+        s._TOKEN_USAGE_WARMING = False
+        try:
+            v = s._token_usage_payload(blocking=True)
+        except RuntimeError as e:
+            self.fail('聚合器抛错时 _token_usage_payload 未兜底: %s' % e)
+        self.assertIsInstance(v, dict)
+        # 降级后仍要带全字段（前端解构不能炸）
+        for k in ('totalTokens', 'turns', 'days', 'hours', 'models'):
+            self.assertIn(k, v, '降级路径缺少字段 %s' % k)
+        self.assertEqual(v.get('totalTokens'), 0)
 
     def test_pending_payload_shape_matches_contract(self):
         """pending 占位也必须带全字段，避免前端解构 undefined。"""

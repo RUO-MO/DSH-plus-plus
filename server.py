@@ -992,7 +992,20 @@ def _token_usage_payload(blocking=None):
                         'models': [], 'dayModels': {}, 'modelTokens': {},
                         'hoursToday': {}, 'firstUsedAt': None, 'lastUsedAt': None,
                         'maxTurnMs': 0}
-            value = session_store.aggregate_token_usage()
+            try:
+                value = session_store.aggregate_token_usage()
+            except Exception as e:
+                # 无 DSH 会话目录（未安装 / 尚未产生会话 / home 未解析）时
+                # 聚合器会抛 RuntimeError。这里必须兜住 —— 否则 /api/token-usage
+                # 会对调用方返回 500，且阻塞路径（CLI / 测试）直接崩。
+                # 降级为「零用量 + warming」，让面板显示「统计中…」而非报错。
+                add_log('Token 用量聚合失败，降级为零值：{0}'.format(e), 'warn')
+                return {'warming': True, 'degraded': True, 'pending': False,
+                        'computedAt': int(now * 1000),
+                        'totalTokens': 0, 'turns': 0, 'days': {}, 'hours': {},
+                        'models': [], 'dayModels': {}, 'modelTokens': {},
+                        'hoursToday': {}, 'firstUsedAt': None, 'lastUsedAt': None,
+                        'maxTurnMs': 0}
             value['computedAt'] = int(now * 1000)
             if value.get('totalTokens') or (value.get('days') or {}):
                 _TOKEN_USAGE_CACHE['key'] = True
