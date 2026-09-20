@@ -1,0 +1,31 @@
+{
+  "name": "dsh-plugin-dshpp",
+  "version": "0.2.0",
+  "description": "DSH++ self-installing runtime for DSH Desktop: P1 read-only panel (status/themes/sessions/providers/enhance/market/plugins/logs/settings), plugin/skin management. Installed and uninstalled by its own embedded installer scripts through the dshskin file:// pattern — never a bare profile dependency.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "web/index.html",
+    "cordis.patch.yml"
+  ],
+  "engines": {
+    "dsh": ">=0.1.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "license": "MIT"
+}

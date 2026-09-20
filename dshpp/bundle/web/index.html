@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH++ · P1 只读管理面板</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#0f1320; --border:#232a3b;
+    --fg:#d7dde8; --dim:#565f89; --accent:#7aa2f7; --accent2:#7c5cff;
+    --ok:#9ece6a; --err:#f7768e; --warn:#e0af68; --dis:#565f89;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:ui-monospace,Consolas,monospace;
+    font-size:13px; display:flex; height:100vh; overflow:hidden;
+  }
+  #nav{
+    width:210px; flex:0 0 210px; overflow-y:auto;
+    border-right:1px solid var(--border); background:var(--panel2);
+    padding:12px 0;
+  }
+  #nav .brand{
+    padding:0 16px 12px; font-weight:bold; color:var(--accent);
+    letter-spacing:.5px; font-size:13px;
+  }
+  #nav .brand small{display:block; color:var(--dim); font-weight:normal; font-size:11px; margin-top:3px;}
+  #nav button{
+    display:block; width:100%; text-align:left; border:none; background:none;
+    color:var(--fg); font-family:inherit; font-size:13px; padding:8px 16px;
+    cursor:pointer; border-left:3px solid transparent;
+  }
+  #nav button:hover{background:var(--panel); color:#fff;}
+  #nav button.active{background:var(--panel); color:var(--accent); border-left-color:var(--accent);}
+  #main{flex:1; overflow-y:auto; padding:20px 24px 10px;}
+  h2{margin-bottom:14px; color:var(--accent); font-size:15px; font-weight:bold;}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:6px;
+    padding:14px; margin-bottom:14px;
+  }
+  .card h3{margin-bottom:10px; font-size:13px; color:var(--accent2);}
+  table{width:100%; border-collapse:collapse; font-size:12px;}
+  th,td{padding:6px 8px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top;}
+  th{color:var(--dim); font-weight:bold; white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .badge{
+    display:inline-block; padding:1px 7px; border-radius:3px;
+    font-size:11px; white-space:nowrap;
+  }
+  .ok{background:#23320f; color:var(--ok);}
+  .err{background:#3a1520; color:var(--err);}
+  .warn{background:#3a2f12; color:var(--warn);}
+  .dis{background:var(--panel2); color:var(--dis);}
+  .box{background:var(--panel2); border:1px solid var(--border); padding:10px; border-radius:5px; overflow:auto;}
+  .kvline{font-size:12px; margin-bottom:6px;}
+  .kvline b{color:var(--accent);}
+  .list-line{font-size:12px; margin:3px 0;}
+  .dim{color:var(--dim);}
+  .grid{display:grid; gap:14px;}
+  .grid2{grid-template-columns:repeat(2,1fr);}
+  .grid4{grid-template-columns:repeat(3,1fr);}
+  @media(max-width:1100px){.grid2,.grid4{grid-template-columns:1fr;}}
+  .count-box{text-align:center; padding:12px;}
+  .count-box .n{font-size:22px; font-weight:bold; color:var(--accent);}
+  .count-box .k{color:var(--dim); font-size:12px; margin-top:4px;}
+  .error{padding:10px 12px; border:1px solid #5a2331; background:#2a1119; color:var(--err); border-radius:5px; font-size:12px; white-space:pre-wrap;}
+  .loading{color:var(--dim); font-size:12px; padding:12px;}
+  input[type=search]{
+    width:100%; background:var(--panel2); border:1px solid var(--border);
+    color:var(--fg); font-family:inherit; font-size:13px; padding:8px 12px;
+    border-radius:5px; margin-bottom:14px;
+  }
+  input[type=search]:focus{outline:none; border-color:var(--accent);}
+  details{margin-top:6px;}
+  summary{cursor:pointer; font-size:12px; color:var(--accent);}
+  pre{
+    background:var(--panel2); color:var(--fg); padding:10px; border-radius:5px;
+    font-family:ui-monospace,Consolas,monospace; font-size:11px; overflow:auto;
+    white-space:pre-wrap; word-break:break-word; max-height:400px;
+  }
+  button.small{
+    background:var(--panel2); color:var(--accent); border:1px solid var(--border);
+    font-family:inherit; font-size:11px; padding:2px 8px; border-radius:4px; cursor:pointer;
+  }
+  button.small:hover{border-color:var(--accent);}
+  footer{margin-top:20px; padding:12px 0; color:var(--dim); font-size:11px; border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<nav id="nav">
+  <div class="brand">DSH++<small>P1 只读管理面板</small></div>
+  <button data-tab="overview" class="active">概览</button>
+  <button data-tab="themes">主题</button>
+  <button data-tab="sessions">会话</button>
+  <button data-tab="providers">供应商</button>
+  <button data-tab="enhance">增强</button>
+  <button data-tab="market">市场</button>
+  <button data-tab="plugins">插件</button>
+  <button data-tab="logs">日志</button>
+  <button data-tab="settings">设置</button>
+</nav>
+
+<main id="main">
+  <div id="content"></div>
+  <footer id="foot"></footer>
+</main>
+
+<script>
+'use strict';
+
+// ---------- 工具函数 ----------
+function esc(s){
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function fmtBytes(n){
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  const u=['B','KB','MB','GB'];
+  let i=0, v=Number(n);
+  while (v>=1024 && i<u.length-1){ v/=1024; i++; }
+  return v.toFixed(i===0?0:1)+' '+u[i];
+}
+function fmtTime(iso){
+  if (!iso) return '-';
+  const d=new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const p=x=>String(x).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+function badge(text, color){
+  return '<span class="badge '+esc(color)+'">'+esc(text||'-')+'</span>';
+}
+async function getJSON(url){
+  const res=await fetch(url, { cache:'no-store' });
+  const data=await res.json();
+  if (!res.ok || !data || data.ok===false){
+    const msg=(data&&data.error) ? data.error : (data&&data.message)||'';
+    const e=new Error('HTTP '+res.status+(msg?': '+msg:''));
+    e.status=res.status; e.data=data; throw e;
+  }
+  return data;
+}
+function errorBox(err){
+  const status=(err&&err.status)?'HTTP '+err.status+' · ':'';
+  return '<div class="error">'+esc(status)+esc((err&&err.message)||String(err))+'</div>';
+}
+function loadingBox(){ return '<div class="loading">加载中…</div>'; }
+function c(ok){ return ok?'ok':'err'; }
+
+// ---------- 页脚 / 卡片骨架 ----------
+let capabilities=null;
+async function renderFooter(){
+  const rawCap=capabilities||{version:'-',entryCount:0};
+  document.getElementById('foot').innerHTML=
+    'DSH++ v'+esc(rawCap.version||'-')+' · 界面入口 '+esc(rawCap.entryCount ?? 0)+
+    ' &nbsp;·&nbsp; DSH++ P1 只读面板（不依赖 9222；数据与 Python 面板同源）';
+}
+async function fetchCapabilities(){
+  try{
+    const j=await getJSON('/dshpp/capabilities');
+    capabilities=j;
+  }catch(e){ capabilities=null; }
+  renderFooter();
+}
+
+const content=document.getElementById('content');
+const TABLES={
+  overview  : renderOverview,
+  themes    : renderThemes,
+  sessions  : renderSessions,
+  providers : renderProviders,
+  enhance   : renderEnhance,
+  market    : renderMarket,
+  plugins   : renderPlugins,
+  logs      : renderLogs,
+  settings  : renderSettings,
+};
+
+document.getElementById('nav').addEventListener('click', function(ev){
+  const btn=ev.target.closest('button[data-tab]');
+  if(!btn) return;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b===btn));
+  const tab=btn.getAttribute('data-tab');
+  content.innerHTML=loadingBox();
+  Promise.resolve(TABLES[tab]()).catch(e=>{ content.innerHTML=errorBox(e); });
+});
+
+// ---------- 概览 ----------
+async function renderOverview(){
+  const [st, cap]=await Promise.all([ getJSON('/dshpp/status'), getJSON('/dshpp/capabilities') ]);
+  capabilities=cap; renderFooter();
+  let html='<h2>概览</h2>';
+  html+='<div class="card"><h3>路径信息</h3>';
+  html+=kv('skinRoot', st.skinRoot, st.skinRootSource);
+  html+=kv('dshHome', st.dshHome, st.dshHomeSource);
+  html+=kv('profileDir', st.profileDir);
+  html+='</div>';
+  const ent=st.counts||{};
+  html+='<div class="card"><h3>数据统计</h3><div class="grid grid4">';
+  const labels=[['themes','主题'],['sessions','会话'],['sessionProjects','会话工程'],['plugins','插件'],
+                ['enhanceModules','增强模块'],['enhanceScripts','增强脚本'],['logs','日志'],['marketScripts','市场脚本']];
+  for(const [k,label] of labels){
+    html+='<div class="count-box"><div class="n">'+esc(ent[k] ?? 0)+'</div><div class="k">'+esc(label)+'</div></div>';
+  }
+  html+='</div></div>';
+  html+='<div class="card"><h3>诊断</h3><table><tr><th>项目</th><th>状态</th><th>说明</th></tr>';
+  for(const d of (st.diagnostics||[])){
+    html+='<tr><td>'+esc(d.name)+'</td><td>'+badge(d.ok?'OK':'FAIL', c(d.ok))+'</td><td>'+esc(d.detail||'')+'</td></tr>';
+  }
+  html+='</table>';
+  if(st.zstd){ html+='<div class="list-line">zstd: '+badge(st.zstd.available?'可用':'不可用', st.zstd.available?'ok':'warn')+(st.zstd.reason?' · '+esc(st.zstd.reason):'')+'</div>'; }
+  html+='</div>';
+  html+='<div class="card"><h3>能力</h3>';
+  html+='<div style="margin-bottom:8px;">version: <b>'+esc(cap.version||'-')+'</b> · interface entries: <b>'+esc(cap.entryCount ?? 0)+'</b></div>';
+  html+='<div style="margin-bottom:6px;">servicesPresent:</div>';
+  if(cap.servicesPresent && cap.servicesPresent.length){
+    html+='<div>'+cap.servicesPresent.map(s=>badge(s,'ok')).join(' ')+'</div>';
+  } else {
+    html+='<div class="dim">（无）</div>';
+  }
+  const probe=(name,p)=>badge((p&&p.present)?'就绪':'缺失', (p&&p.present)?'ok':'dis')+'<span class="dim"> '+(p&&p.surface?esc(p.surface):'')+'</span>';
+  html+='<div class="list-line">会话查询: '+probe('sessionQuery',cap.sessionQuery)+'</div>';
+  html+='<div class="list-line">凭据访问: '+probe('credentials',cap.credentials)+'</div>';
+  html+='<div class="list-line">桌面档案: '+probe('desktopProfiles',cap.desktopProfiles)+'</div>';
+  html+='<div class="list-line">桌面 pnpm: '+probe('desktopPnpm',cap.desktopPnpm)+'</div>';
+  html+='</div>';
+  return html;
+}
+function kv(k,v,src){
+  return '<div class="kvline"><b>'+esc(k)+':</b> '+esc(v||'-')+(src?' <span class="dim">('+esc(src)+')</span>':'')+'</div>';
+}
+
+// ---------- 主题 ----------
+async function renderThemes(){
+  const j=await getJSON('/dshpp/themes');
+  const ths=j.themes||{};
+  let html='<h2>主题 <span class="dim">('+esc(j.count ?? Object.keys(ths).length)+')</span></h2>';
+  html+='<div class="card"><div class="kvline">当前主题: '+badge(esc(j.active||'-'),'ok')+'</div>'+
+        '<div class="kvline">configFile: '+esc(j.configFile||'-')+'</div>'+
+        '<div class="kvline">configVersion: '+esc(j.configVersion||'-')+'</div></div>';
+  html+='<div class="grid grid2">';
+  for(const id in ths){
+    const t=ths[id];
+    html+='<div class="card"><h3>'+esc(t.name||id);
+    if(id===j.active) html+=' '+badge('当前','ok');
+    html+='</h3>';
+    html+='<div class="kvline"><b>id:</b> '+esc(id)+'</div>';
+    if(t.version) html+='<div class="kvline"><b>版本:</b> '+esc(t.version)+'</div>';
+    html+='<div class="kvline"><b>外观:</b> '+esc(t.appearance||'-')+'</div>';
+    html+='<div class="kvline"><b>内置:</b> '+badge(t.builtin?'是':'否', t.builtin?'ok':'dis')+
+          '&nbsp; 图片: '+badge(t.hasImage?'是':'否', t.hasImage?'ok':'dis')+
+          '&nbsp; CSS: '+badge(t.hasCss?'是':'否', t.hasCss?'ok':'dis')+'</div>';
+    const keys=t.params?Object.keys(t.params):[];
+    if(keys.length){
+      html+='<details><summary>参数 ('+keys.length+')</summary><table>';
+      for(const k of keys) html+='<tr><td>'+esc(k)+'</td><td>'+esc(t.params[k])+'</td></tr>';
+      html+='</table></details>';
+    }
+    html+='<button class="small" data-tab="themes" data-theme="'+esc(id)+'">预览 CSS</button> '+
+          '<span class="dim" data-css-holder></span></div>';
+  }
+  html+='</div>';
+  return html;
+}
+async function contentClick(ev){
+  const btn=ev.target.closest('button[data-theme]');
+  if(!btn) return;
+  const holder=btn.parentElement.querySelector('[data-css-holder]');
+  holder.innerHTML='加载中…';
+  try{
+    const j=await getJSON('/dshpp/themes/'+encodeURIComponent(btn.getAttribute('data-theme')));
+    const tt=j.theme||{};
+    holder.innerHTML='<pre>'+esc(tt.cssPreview||'(无 CSS 内容)')+
+      (tt.cssLength? '<br><span class="dim">（共 '+tt.cssLength+' 字符，'+(tt.cssPreview&&tt.cssPreview.length<tt.cssLength?(tt.cssLength-tt.cssPreview.length)+' 字符已截断':'-')+'）</span>':'')+'</pre>';
+  }catch(e){
+    holder.innerHTML=badge('加载失败','err');
+  }
+}
+
+// ---------- 会话 ----------
+let sessionQuery='';
+async function renderSessions(){
+  sessionQuery='';
+  const html='<h2>会话</h2>'
+    +'<input type="search" id="sessionSearch" placeholder="搜索会话（按 id / 目录名）…" autocomplete="off">'
+    +'<div id="sessionBody">'+loadingBox()+'</div>'
+    +'<div class="card" id="sessionHint"></div>';
+  content.innerHTML=html;
+  const hint=document.getElementById('sessionHint');
+  try{
+    const cap=await getJSON('/dshpp/capabilities');
+    hint.innerHTML='<div class="kvline"><b>说明（P1 会话只读）:</b><span class="dim"> 会话以 zstd 压缩存储；P1 暂未解码，decode 状态见下。能力探测：sessionQuery='+esc(cap.sessionQuery&&cap.sessionQuery.surface||'-')+'</span></div>';
+  }catch(e){
+    hint.innerHTML='<div class="dim">（无法获取能力信息）</div>';
+  }
+  loadSessions('');
+  document.getElementById('sessionSearch').addEventListener('input', ev=>{
+    const q=ev.target.value.trim();
+    clearTimeout(sessionQuery);
+    sessionQuery=setTimeout(()=>loadSessions(q), 300);
+  });
+}
+async function loadSessions(q){
+  const body=document.getElementById('sessionBody');
+  if(!body) return;
+  body.innerHTML=loadingBox();
+  try{
+    const url=q? ('/dshpp/sessions/search?q='+encodeURIComponent(q)) : '/dshpp/sessions';
+    const j=await getJSON(url);
+    let html='<div class="kvline"><b>root:</b> <span class="dim">'+esc(j.root||'-')+'</span>'+
+      ' · 总计: '+esc(j.total ?? 0)+' 条</div>';
+    if(j.decode) html+='<div class="list-line">decode: '+badge(esc(j.decode==='ready'?'就绪':j.decode), j.decode==='zstd-unavailable'?'warn':'dis')+'</div>';
+    if(j.zstd) html+='<div class="list-line">zstd: '+badge(j.zstd.available?'可用':'不可用', j.zstd.available?'ok':'warn')+(j.zstd.reason?' · '+esc(j.zstd.reason):'')+'</div>';
+    for(const p of (j.projects||[])){
+      html+='<div class="card"><h3>'+esc(p.key||'(未知工程)')+'</h3><table><tr><th>id</th><th>格式</th><th>压缩</th><th>大小</th><th>修改时间</th></tr>';
+      for(const s of (p.sessions||[])){
+        const id=s.id||s.dirName||'-';
+        html+='<tr><td>'+esc(id)+'</td><td>'+esc(s.format||'-')+'</td>'+
+          '<td>'+badge(s.compressed?'是':'否', s.compressed?'warn':'dis')+'</td>'+
+          '<td>'+esc(fmtBytes(s.sizeBytes))+'</td><td>'+esc(fmtTime(s.mtime))+'</td></tr>';
+      }
+      html+='</table></div>';
+    }
+    if(!j.projects || !j.projects.length){
+      html+='<div class="card dim">（无会话）</div>';
+    }
+    body.innerHTML=html;
+  }catch(e){
+    body.innerHTML=errorBox(e);
+  }
+}
+
+// ---------- 供应商 ----------
+async function renderProviders(){
+  const j=await getJSON('/dshpp/providers');
+  let html='<h2>供应商</h2>';
+  const cred=j.credentials||{};
+  html+='<div class="card"><h3>凭据引用（已掩码）</h3>';
+  if(cred.degraded){ html+='<div class="warning">凭据访问降级</div>'; }
+  html+='<table><tr><th>键</th><th>值（掩码）</th></tr>';
+  for(const r of (cred.refs||[])){
+    html+='<tr><td>'+esc(r.key)+'</td><td>'+esc(r.value||'-')+'</td></tr>';
+  }
+  html+='</table>';
+  if(cred.records && cred.records.length){
+    html+='<div style="margin-top:8px;"><span class="dim">credentials.root 记录:</span> '+
+      cred.records.map(r=>badge(esc(r.key),'dis')).join(' ')+'</div>';
+  }else{
+    html+='<div class="dim" style="margin-top:8px;">（无凭据记录）</div>';
+  }
+  html+='<div class="list-line">credentialsFile: <span class="dim">'+esc(j.credentialsFile||'-')+'</span></div>';
+  html+='<div class="list-line">settingsFile: <span class="dim">'+esc(j.settingsFile||'-')+'</span></div>';
+  html+='<div class="list-line">apiKeysMasked: '+badge(Boolean(j.apiKeysMasked), j.apiKeysMasked?'ok':'warn')+'</div>';
+  html+='</div>';
+
+  const pv=j.providers||{};
+  html+='<div class="card"><h3>大模型供应商</h3>';
+  if(pv.degraded){ html+='<div class="error">供应商数据降级/不可用</div>'; }
+  html+='<table><tr><th>id</th><th>名称</th><th>API</th><th>Base URL</th><th>模型数</th><th>模型 id</th></tr>';
+  for(const p of (pv.providers||[])){
+    const ids=p.modelIds||[];
+    const shown=ids.slice(0,5).join(', ');
+    const more=ids.length>5? (' +'+(ids.length-5)):'';
+    html+='<tr><td>'+esc(p.id)+'</td><td>'+esc(p.displayName||'-')+'</td>'+
+      '<td>'+esc(p.api||'-')+'</td><td>'+esc(p.baseURL||'-')+'</td>'+
+      '<td>'+esc(p.modelCount ?? ids.length)+'</td><td>'+esc(shown)+(more? badge(more,'dim'):'')+'</td></tr>';
+  }
+  if(!pv.providers || !pv.providers.length){
+    html+='<tr><td colspan="6" class="dim">（无供应商）</td></tr>';
+  }
+  html+='</table>';
+  if(j.officialService){
+    html+='<div class="list-line">officialService: '+badge(j.officialService.present?'存在':'缺失', j.officialService.present?'ok':'dis')+
+      (j.officialService.present?' <span class="dim">2D 模式可用</span>':'')+'</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+// ---------- 增强 ----------
+async function renderEnhance(){
+  const j=await getJSON('/dshpp/enhance');
+  if(j.ok===undefined && j.degraded){ return '<div class="error">增强模块降级不可用</div>'; }
+  let html='<h2>增强</h2>';
+  html+='<div class="card"><div class="kvline">master 开关: '+badge(j.enabled?'启用':'停用', j.enabled?'ok':'dis')+
+    ' · 模块 '+esc(j.moduleCount ?? Object.keys(j.modules||{}).length)+' / 启用 '+esc(j.moduleEnabledCount ?? 0)+
+    ' · 脚本 '+esc(j.scriptCount ?? Object.keys(j.scripts||{}).length)+'</div>';
+  html+='<h3>模块</h3><table><tr><th>id</th><th>状态</th></tr>';
+  for(const id in (j.modules||{})){
+    const on=j.modules[id];
+    html+='<tr><td>'+esc(id)+'</td><td>'+badge(on?'启用':'停用', on?'ok':'dis')+'</td></tr>';
+  }
+  html+='</table>';
+  html+='<h3>用户脚本</h3><table><tr><th>名称</th><th>状态</th></tr>';
+  for(const name in (j.scripts||{})){
+    const on=j.scripts[name];
+    html+='<tr><td>'+esc(name)+'</td><td>'+badge(on?'启用':'停用', on?'ok':'dis')+'</td></tr>';
+  }
+  html+='</table>';
+  if(j.hotkeys && Object.keys(j.hotkeys).length){
+    html+='<h3>热键</h3><div>';
+    for(const k in j.hotkeys) html+='<span class="badge dis">'+esc(k)+'</span> ';
+    html+='</div>';
+  }
+  html+='</div>';
+
+  try{
+    const f=await getJSON('/dshpp/enhance/files');
+    html+='<div class="card"><h3>脚本文件</h3><div class="list-line">dir: <span class="dim">'+esc(f.dir||'-')+'</span></div>';
+    html+='<table><tr><th>名称</th><th>大小</th><th>修改时间</th></tr>';
+    for(const s of (f.userScripts||[])){
+      html+='<tr><td>'+esc(s.name)+'</td><td>'+esc(fmtBytes(s.sizeBytes))+'</td><td>'+esc(fmtTime(s.mtime))+'</td></tr>';
+    }
+    html+='</table>';
+    html+='<h3>内置模块</h3><table><tr><th>id</th><th>状态</th><th>说明</th></tr>';
+    for(const m of (f.builtinModules||[])){
+      html+='<tr><td>'+esc(m.id)+'</td><td>'+badge(m.enabled?'启用':'停用', m.enabled?'ok':'dis')+'</td><td>'+esc(m.note||'')+'</td></tr>';
+    }
+    html+='</table></div>';
+  }catch(e){
+    html+='<div class="card"><h3>脚本文件</h3>'+errorBox(e)+'</div>';
+  }
+  return html;
+}
+
+// ---------- 市场 ----------
+async function renderMarket(){
+  const j=await getJSON('/dshpp/market');
+  let html='<h2>市场</h2>';
+  if(j.degraded){
+    html+='<div class="error">市场数据降级/不可用（source: '+esc(j.source||'-')+'）</div>';
+    return html;
+  }
+  html+='<div class="card"><div class="kvline">source: <b>'+esc(j.source||'-')+'</b> · 已安装: '+esc(j.installedCount ?? 0)+'</div></div>';
+  for(const s of (j.scripts||[])){
+    const ins=s.installed;
+    const insBadge= ins===null ? badge('-','dis') : badge(ins?'已安装':'未安装', ins?'ok':'dis');
+    html+='<div class="card"><div class="list-line">'+esc(s.icon||'')+' <b>'+esc(s.title||s.id)+'</b>'+
+      ' <span class="dim">'+esc(s.id)+'</span> v'+esc(s.version||'-')+' '+insBadge+'</div>'+
+      '<div class="list-line dim">'+esc(s.description||'')+'</div>';
+    if(s.permissions && s.permissions.length){
+      html+='<div>'+s.permissions.map(p=>badge(esc(p),'dis')).join(' ')+'</div>';
+    }
+    html+='</div>';
+  }
+  if(!j.scripts || !j.scripts.length){
+    html+='<div class="card dim">（市场为空）</div>';
+  }
+  return html;
+}
+
+// ---------- 插件 ----------
+async function renderPlugins(){
+  const j=await getJSON('/dshpp/plugins');
+  let html='<h2>插件</h2>';
+  if(j.globalEnabled!==null){
+    html+='<div class="card"><div class="kvline">全局启用开关: '+badge(j.globalEnabled?'已启用':'已停用', j.globalEnabled?'ok':'dis')+
+      ' · registryFile: <span class="dim">'+esc(j.registryFile||'-')+'</span></div></div>';
+  }
+  html+='<div class="card"><h3>插件列表 ('+esc(j.total ?? (j.plugins||[]).length)+')</h3><table>'+
+    '<tr><th>名称</th><th>版本</th><th>渠道</th><th>桌面</th><th>Web</th><th>Bundle</th><th>Client</th><th>安装时间</th><th>引擎</th></tr>';
+  for(const p of (j.plugins||[])){
+    const e=p.enabled;
+    const desk=(e&&e.desktop!==undefined)? badge(e.desktop?'开':'关', e.desktop?'ok':'dis') : badge('-','dis');
+    const web =(e&&e.web!==undefined)? badge(e.web?'开':'关', e.web?'ok':'dis') : badge('-','dis');
+    html+='<tr><td>'+esc(p.name)+'</td><td>'+esc(p.version||'-')+'</td><td>'+esc(p.track||'-')+'</td>'+
+      '<td>'+desk+'</td><td>'+web+'</td>'+
+      '<td>'+badge(p.hasBundle?'是':'否', p.hasBundle?'ok':'dis')+'</td>'+
+      '<td>'+badge(p.hasClient?'是':'否', p.hasClient?'ok':'dis')+'</td>'+
+      '<td>'+esc(fmtTime(p.installedAt))+'</td><td>'+esc(p.engines?JSON.stringify(p.engines):'-')+'</td></tr>';
+  }
+  html+='</table></div>';
+  html+='<details><summary>目录树（/dshpp/plugins/tree）</summary><div id="plugTree">'+loadingBox()+'</div></details>';
+  content.innerHTML=html;
+  getJSON('/dshpp/plugins/tree').then(t=>{
+    const box=document.getElementById('plugTree');
+    let h='<div class="list-line dim">root: '+esc(t.root||'-')+'</div>';
+    for(const p of (t.plugins||[])){
+      h+='<div style="margin:6px 0;"><b>'+esc(p.name||'-')+'</b>';
+      h+='<table style="margin-top:4px;"><tr><th>版本</th><th>index</th><th>client</th><th>修改时间</th></tr>';
+      for(const v of (p.versions||[])){
+        h+='<tr><td>'+esc(v.version)+'</td><td>'+badge(v.hasIndex?'是':'否', v.hasIndex?'ok':'dis')+'</td>'+
+          '<td>'+badge(v.hasClient?'是':'否', v.hasClient?'ok':'dis')+'</td><td>'+esc(fmtTime(v.mtime))+'</td></tr>';
+      }
+      h+='</table></div>';
+    }
+    if(!t.plugins || !t.plugins.length) h+='<div class="dim">（无插件目录）</div>';
+    box.innerHTML=h;
+  }).catch(e=>{ const box=document.getElementById('plugTree'); if(box) box.innerHTML=errorBox(e); });
+  return null;
+}
+
+// ---------- 日志 ----------
+async function renderLogs(){
+  const j=await getJSON('/dshpp/logs');
+  let html='<h2>日志</h2>';
+  html+='<div class="card"><div class="kvline">总条数: <b>'+esc(j.count ?? 0)+'</b><span class="dim">（仅显示尾部 '+esc((j.entries||[]).length)+' 条）</span>'+
+    ' · file: <span class="dim">'+esc(j.file||'-')+'</span></div>'+
+    '<table><tr><th>时间</th><th>类型</th><th>消息</th></tr>';
+  for(const e of (j.entries||[])){
+    const typ=e.type||'info';
+    const col = typ==='error'?'err' : typ==='warn'?'warn' : 'dis';
+    html+='<tr><td style="white-space:nowrap;">'+esc(fmtTime(e.ts||e.time))+'</td>'+
+      '<td>'+badge(esc(typ), col)+'</td>'+
+      '<td style="white-space:normal; word-break:break-word;">'+esc(e.msg)+''+(e.repeat?' <span class="dim">(×'+esc(e.repeat)+')</span>':'')+'</td></tr>';
+  }
+  if(!j.entries || !j.entries.length) html+='<tr><td colspan="3" class="dim">（暂无日志）</td></tr>';
+  html+='</table></div>';
+  return html;
+}
+
+// ---------- 设置 ----------
+async function renderSettings(){
+  const j=await getJSON('/dshpp/settings');
+  let html='<h2>设置</h2>';
+  html+='<div class="card"><h3>配置</h3>';
+  const cfg=j.config;
+  if(cfg){
+    const grid=[['active','启用'],['channel','渠道'],['launcherMode','启动方式'],['configVersion','配置版本'],
+                ['dshHome','DSH 根目录'],['desktopExe','桌面程序']];
+    for(const [k,label] of grid){
+      if(k in cfg) html+='<div class="kvline"><b>'+esc(label)+':</b> '+esc(cfg[k])+'</div>';
+    }
+    if(cfg.themeIds && cfg.themeIds.length){
+      html+='<div class="kvline"><b>主题 id 序列:</b> '+cfg.themeIds.map(id=>badge(esc(id),'dis')).join(' ')+'</div>';
+    }
+  }else{
+    html+='<div class="dim">配置不可用</div>';
+  }
+  html+='<div class="list-line">configFile: <span class="dim">'+esc(j.configFile||'-')+'</span></div>';
+  html+='</div>';
+  const ns=j.namespace;
+  html+='<div class="card"><h3>命名空间 (dshpp)</h3>';
+  if(ns && ns.raw!==null && ns.raw!==undefined){
+    html+='<div class="list-line dim">settingsFile: '+esc(ns.settingsFile||'-')+'</div><pre>'+esc(ns.raw)+'</pre>';
+  }else{
+    html+='<div class="dim">未配置 dshpp 命名空间</div>';
+    if(ns && ns.settingsFile) html+='<div class="list-line dim">settingsFile: '+esc(ns.settingsFile)+'</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+// ---------- 启动 ----------
+document.getElementById('content').addEventListener('click', contentClick);
+fetchCapabilities();
+document.getElementById('nav').querySelector('button.active').click();
+</script>
+</body>
+</html>

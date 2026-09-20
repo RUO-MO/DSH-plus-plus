@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  unit-tests:
+    # DSHSkin 面向 Windows 桌面版（CDP/注册表/Electron），在 Windows 上验证
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install websocket-client zstandard PyYAML Pillow
+
+      - name: Run unit tests
+        run: python tests/run_all.py

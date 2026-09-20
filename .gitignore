@@ -1,0 +1,39 @@
+# ---- 用户数据（~/.dsh-skins：安装后的主题/配置/日志，个人数据勿入库）----
+# 注意：~/.dsh-skins 位于用户主目录，仓库内如出现同名数据目录同样排除
+.dsh-skins/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- PyInstaller 构建产物 ----
+build/
+dist/
+*.spec.bak
+
+# ---- 内部工作目录 / 旧备份（含私有主题痕迹与历史快照，勿上传）----
+.workbuddy/
+_backup/
+.build-archive/
+_work/
+
+# ---- 运行时日志 / 本机令牌 ----
+*.log
+*.old.json
+server.token
+*.token.tmp
+
+# ---- 临时 / 导出扁平残留 ----
+*.tmp
+_patch_*.py
+_probe_*.py
+_dbg*.py
+_gh.py
+_mcpcfg.json
+_*.py
+C__Users_*
+.DS_Store
+Thumbs.db

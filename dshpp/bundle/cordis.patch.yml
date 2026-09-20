@@ -1,0 +1,8 @@
+# dsh-plugin-dshpp bundle patch anchor (referenced by package.json `dsh.bundle.patch`).
+#
+# file:// 安装路径（installer-core.mjs）直接把 host 半写进 profile 的
+# cordis.patch.yml managed block，本文件不参与该路径。保留它仅为满足
+# bundle 形态规范（与 dsh-plugin-token-usage 一致），供未来官方市场/包机制消费。
+- insert:
+    - id: dsh-plugin-dshpp
+      name: 'dsh-plugin-dshpp'

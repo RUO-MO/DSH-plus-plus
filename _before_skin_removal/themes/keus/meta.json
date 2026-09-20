@@ -1,0 +1,19 @@
+{
+  "id": "keus",
+  "name": "Keus",
+  "version": "1.1.0",
+  "appearance": "both",
+  "image": "background.png",
+  "params": {
+    "glow_color": "#47a9ff",
+    "glow_strength": 60,
+    "glass_opacity": 72,
+    "blur_strength": 14,
+    "radius": 14,
+    "overlay_color": "#ffffff",
+    "overlay_alpha": 0,
+    "font_scale": 100,
+    "force_dark": false
+  },
+  "builtin": true
+}

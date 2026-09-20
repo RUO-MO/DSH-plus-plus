@@ -1,0 +1,152 @@
+/* ============================================================
+   DSHSkin · DeepSeek Harness 暗色主题（由 theme_engine 生成，请勿手工编辑）
+   - 背景图铺满窗口（可叠加提亮/暗化层）
+   - 覆盖 --dsw-alias-* 设计系统 token，前端文本/边框/滚动条自动跟随
+   - 框架透明，背景透出；侧栏/会话/输入条做雾态玻璃
+   - 输入条聚焦光晕（颜色/强度可调）
+   dsh-skin-template: v7
+   ============================================================ */
+
+/* ---------- 0. 设计系统 token 覆盖（浅/暗两套，跟随 DSH 明暗） ---------- */
+:root {
+  --dsw-alias-label-primary: rgba(235, 240, 247, .97) !important;
+  --dsw-alias-label-primary-bluish: rgba(235, 240, 247, .97) !important;
+  --dsw-alias-label-primary-foreground: rgba(235, 240, 247, .97) !important;
+  --dsw-alias-label-primary-inverted: rgba(235, 240, 247, .30) !important;
+  --dsw-alias-label-secondary: rgba(235, 240, 247, .78) !important;
+  --dsw-alias-label-tertiary: rgba(235, 240, 247, .60) !important;
+  --dsw-alias-label-caption: rgba(235, 240, 247, .50) !important;
+  --dsw-alias-label-dimmed: rgba(150, 160, 175, .72) !important;
+  --dsw-alias-bg-base: transparent !important;
+  --dsw-alias-bg-layer-1: transparent !important;
+  --dsw-alias-bg-layer-2: transparent !important;
+  --dsw-alias-bg-layer-3: transparent !important;
+  --dsw-alias-border-l1: rgba(255, 255, 255, 0.10) !important;
+  --dsw-alias-border-l2: rgba(255, 255, 255, 0.2) !important;
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.30000000000000004) !important;
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.4) !important;
+  --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, .07) !important;
+  --dsw-alias-interactive-bg-hover-solid: rgba(255, 255, 255, .10) !important;
+  --dsw-alias-interactive-bg-active: rgba(255, 255, 255, .12) !important;
+  --dsw-alias-markdown-code-block: rgba(10, 12, 16, .72) !important;
+  --dsw-alias-markdown-inline-code: rgba(10, 12, 16, .55) !important;
+  --dsw-alias-scrollbar-bg-l1: rgba(255, 255, 255, .12) !important;
+  --dsw-alias-scrollbar-bg-l2: rgba(255, 255, 255, .20) !important;
+  --dsw-alias-scrollbar-hover-l1: rgba(255, 255, 255, .25) !important;
+  --dsw-alias-scrollbar-hover-l2: rgba(255, 255, 255, .35) !important;
+}
+body[data-ds-dark-theme] {
+  --dsw-alias-label-primary: rgba(235, 240, 247, .97) !important;
+  --dsw-alias-label-primary-bluish: rgba(235, 240, 247, .97) !important;
+  --dsw-alias-label-primary-foreground: rgba(235, 240, 247, .97) !important;
+  --dsw-alias-label-primary-inverted: rgba(235, 240, 247, .30) !important;
+  --dsw-alias-label-secondary: rgba(235, 240, 247, .78) !important;
+  --dsw-alias-label-tertiary: rgba(235, 240, 247, .60) !important;
+  --dsw-alias-label-caption: rgba(235, 240, 247, .50) !important;
+  --dsw-alias-label-dimmed: rgba(150, 160, 175, .72) !important;
+  --dsw-alias-bg-base: transparent !important;
+  --dsw-alias-bg-layer-1: transparent !important;
+  --dsw-alias-bg-layer-2: transparent !important;
+  --dsw-alias-bg-layer-3: transparent !important;
+  --dsw-alias-border-l1: rgba(255, 255, 255, 0.10) !important;
+  --dsw-alias-border-l2: rgba(255, 255, 255, 0.2) !important;
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.30000000000000004) !important;
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.4) !important;
+  --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, .07) !important;
+  --dsw-alias-interactive-bg-hover-solid: rgba(255, 255, 255, .10) !important;
+  --dsw-alias-interactive-bg-active: rgba(255, 255, 255, .12) !important;
+  --dsw-alias-markdown-code-block: rgba(10, 12, 16, .72) !important;
+  --dsw-alias-markdown-inline-code: rgba(10, 12, 16, .55) !important;
+  --dsw-alias-scrollbar-bg-l1: rgba(255, 255, 255, .12) !important;
+  --dsw-alias-scrollbar-bg-l2: rgba(255, 255, 255, .20) !important;
+  --dsw-alias-scrollbar-hover-l1: rgba(255, 255, 255, .25) !important;
+  --dsw-alias-scrollbar-hover-l2: rgba(255, 255, 255, .35) !important;
+}
+
+
+/* ---------- 1. 全局背景 ---------- */
+body {
+  background-image: none;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-color: #0b0d11;
+}
+
+/* ---------- 2. 框架透明，让背景透出 ---------- */
+[data-dsh-skin='frame'] {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* ---------- 3. 左侧栏：雾态玻璃条 ----------
+   注意：**禁止**在侧栏容器上使用 backdrop-filter！
+   DSH 设置面板/权限弹层是挂在侧栏容器里的 fixed 弹层，
+   backdrop-filter 会把 fixed 子元素从「相对视口」改为「相对该容器」定位，
+   导致 800px 居中弹窗被压进 420px 侧栏（设置面板变窄贴左）。
+   只保留半透明玻璃色 + 细边框，弹层不受影响。 */
+[data-dsh-skin='sidebar'] {
+  background: rgba(16, 19, 25, 0.78) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+/* ---------- 4. 右侧栏：雾态玻璃条 ---------- */
+[data-rightbar-col] {
+  background: rgba(16, 19, 25, 0.78) !important;
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  border-left: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+/* ---------- 5. 会话区：浅玻璃（背景透出 + 可读性；同样避免 backdrop-filter，防弹层约束） ---------- */
+[data-dsh-skin='chat'],
+[data-phase]:not([contenteditable]) {
+  background: rgba(16, 19, 25, 0.82) !important;
+}
+
+/* 消息滚动体透明，避免遮挡 */
+[data-conversation-scroll] {
+  background-color: transparent !important;
+}
+
+/* ---------- 6. 输入区座位：压平独立背景 ---------- */
+[data-composer-seat] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* 输入条卡片：磨砂玻璃 + 光晕 */
+[data-composer-card='true'] {
+  background: rgba(16, 19, 25, 0.74) !important;
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* 输入条聚焦光晕 */
+[data-composer-card='true']:focus-within {
+  border-color: rgba(62, 224, 196, 0.55) !important;
+  box-shadow:
+    0 0 0 3px rgba(62, 224, 196, 0.11),
+    0 8px 32px rgba(62, 224, 196, 0.12),
+    0 0 22px rgba(62, 224, 196, 0.09) !important;
+}
+
+/* ---------- 7. 会话头部透明 ---------- */
+[data-slot='conversation.session.header'] {
+  background-color: transparent !important;
+}
+
+/* ---------- 8. 覆盖层玻璃化（只给弹层本体；宿主层常驻全窗，直接上玻璃=整屏蒙尘） ---------- */
+[data-shell-overlay] > * > * {
+  background: rgba(16, 19, 25, 0.80) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* ---------- 9. 字号缩放（可选） ---------- */
+/* 字号默认 */

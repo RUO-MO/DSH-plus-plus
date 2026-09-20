@@ -1,0 +1,14 @@
+# DSHSkin 运行依赖
+# 1) websocket-client：CDP 热注入通道（核心）；缺失时主题管理仍可用，但无法热注入。
+# 2) zstandard + PyYAML：v2 会话管理 / 供应商配置通道（解压会话 JSONL、读凭证）；
+#    缺失时对应面板降级提示，不影响换肤与增强。
+#
+# 安装：python -m pip install -r requirements.txt
+# 或：  python dsh-skin.py deps --install
+websocket-client>=1.6.0
+zstandard>=0.22.0
+PyYAML>=6.0
+
+# 3) pystray + Pillow：系统托盘常驻形态（可选）。缺失时自动降级为控制台形态，不影响换肤/增强；需要托盘图标与开机自启快捷菜单时安装。
+pystray>=0.19.5
+Pillow>=10.0.0
