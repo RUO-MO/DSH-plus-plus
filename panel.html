@@ -1450,7 +1450,7 @@ button,input,textarea,select{font:inherit;color:inherit}
         </div>
       </div>
 
-      <!-- ============ 分区：动态壁纸（对接 DSH 插件 dsh-plugin-wallpaper-engine） ============ -->
+      <!-- ============ 分区：动态壁纸（参考 dsh-wallpaper-engine 契约实现） ============ -->
       <div class="view" id="view-themes" style="display:none;flex-direction:column;flex:1;min-height:0;" data-page-node-id="mwGfUmw6IOw1p6Dr0tTCdv">
         <div class="page-head" data-page-node-id="YG2c4mx1WZJrlUjkrMwge4">
           <div data-page-node-id="sotGDU7zVoIj7WtTIme2be">
@@ -1749,9 +1749,9 @@ button,input,textarea,select{font:inherit;color:inherit}
 
 
   // ============================================================
-  // 动态壁纸（对接 DSH 插件 dsh-plugin-wallpaper-engine）
+  // 动态壁纸（参考 dsh-wallpaper-engine 的接口契约实现对接）
   // 换肤已于 2026-09-20 移除：DSH++ 不再自带换肤引擎，
-  // 动态背景完全交给该插件，本页只做「查看 / 切换 / 微调参数」。
+  // 本页参考该插件的路由契约，实现「查看 / 切换 / 微调参数」。
   // ============================================================
   const WALLPAPER_TYPE_LABEL = {
     video: '视频', scene: '场景', web: '网页', image: '图片', application: '应用'
@@ -2881,7 +2881,7 @@ button,input,textarea,select{font:inherit;color:inherit}
       '帮助',
       'DSH++ 使用说明：\n\n' +
       '1. 增强器：切到「增强」，管理注入运行时、内置模块与自定义脚本；改完点「应用增强」热生效\n' +
-      '2. 动态壁纸：切到「动态壁纸」，切换壁纸并实时调参（由 DSH 插件 dsh-plugin-wallpaper-engine 提供）\n' +
+      '2. 动态壁纸：切到「动态壁纸」，切换壁纸并实时调参（参考 dsh-wallpaper-engine 契约实现）\n' +
       '3. 脚本市场：切到「市场」，一键安装精选增强脚本（安装前会做权限安全审计）\n' +
       '4. 会话管理：切到「会话」，导出 Markdown/JSON 或整库备份（只读，绝不写 DSH 数据）\n' +
       '5. 插件管理：切到「插件」，安装/启停 cordis 插件，写文件前自动留 .orig 备份可一键还原\n' +

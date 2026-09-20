@@ -16,9 +16,10 @@
   python dsh-skin.py --version               显示版本
 
 关于换肤（2026-09-20 变更）:
-  主题库 / 参数调优 / CSS 模板 / 预览 / 主题包安装已移除，「动态背景」改由 DSH 侧插件
-  dsh-plugin-wallpaper-engine 承担。本工具保留：CDP 增强注入（含打标器）、会话管理、
-  供应商配置、插件管理、诊断。老用户升级后跑一次 `migrate` 即可清掉旧主题数据。
+  主题库 / 参数调优 / CSS 模板 / 预览 / 主题包安装已移除，「动态背景」改为
+  参考 dsh-wallpaper-engine 的接口契约实现对接适配层（走其 /wallpaper-engine/* 路由）。
+  本工具保留：CDP 增强注入（含打标器）、会话管理、供应商配置、插件管理、诊断。
+  老用户升级后跑一次 `migrate` 即可清掉旧主题数据。
 
 注入通道：唯一 CDP（渲染进程自带 --remote-debugging-port=9222），
 不修改 deepseek-harness 任何文件；增强全部可逆。
@@ -51,7 +52,7 @@ def _channel(cfg):
 
 # ---------------- 核心 ----------------
 # 换肤（主题库 / 参数 / 模板 / 预览 / 选择器覆盖）已于 2026-09-20 移除，
-# 由 DSH 侧的 dsh-plugin-wallpaper-engine 承担「动态背景」。
+# 「动态背景」改为参考 dsh-wallpaper-engine 契约实现的适配层（见 wallpaper_engine.py）。
 # 保留部分：
 #   · restore()    —— 清除历史遗留的 CDP 注入（老用户升级后跑一次即可干净）
 #   · migrate_legacy_data() —— 清理 ~/.dsh-skins 下残留的主题目录与 config 字段

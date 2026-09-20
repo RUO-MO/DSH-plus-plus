@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""DSH++ 动态壁纸适配层（对接 DSH 插件 dsh-plugin-wallpaper-engine）。
+"""DSH++ 动态壁纸适配层（参考 dsh-plugin-wallpaper-engine 的接口契约实现）。
 
 背景（2026-09-20 换肤移除后）：
-  DSH++ 不再自带换肤引擎，动态背景完全交给 DSH 插件
-  `dsh-plugin-wallpaper-engine`（https://github.com/elysia395/dsh-wallpaper-engine）。
-  本模块只做三件事：
+  DSH++ 不再自带换肤引擎，「动态背景」改为在「动态壁纸」分区内**参考**
+  `dsh-wallpaper-engine`（https://github.com/elysia395/dsh-wallpaper-engine）
+  的接口契约自行实现一个适配层来对接它。本模块只做三件事：
     1. 探测插件是否已装（读 DSH profile 的 node_modules）；
     2. 读 / 写插件的 settings —— **读写都优先走插件的 HTTP 路由**
        （GET/PUT `/wallpaper-engine/settings`），而不是直接改 config.json；
@@ -454,7 +454,7 @@ def inventory_payload(fetch=True):
                     for k, l, dflt in TOGGLES],
         'colors': [{'key': k, 'label': l, 'default': dflt}
                    for k, l, dflt in COLORS],
-        'note': '动态壁纸由 DSH 插件 {0} 提供；本页仅做状态查看与参数微调'.format(PLUGIN_NAME),
+        'note': '动态壁纸参考 {0} 契约实现对接；本页做状态查看与参数读写'.format(PLUGIN_NAME),
     }
     if src.get('route_err'):
         out['settings_route_err'] = src['route_err']

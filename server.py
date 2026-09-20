@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """DSH++ 本地后端（原 DSHSkin）：给 panel.html 提供真实 API，直接驱动 dsh-skin.py
 
-换肤已移除（2026-09-20）：动态壁纸改由 DSH 插件 dsh-plugin-wallpaper-engine 承担；
+换肤已移除（2026-09-20）：动态壁纸改为参考 dsh-wallpaper-engine 契约实现的适配层；
 本后端只保留「增强 / 选择器适配 / 会话与凭证 / 插件管理 / CDP 注入」。
 
 用法:
@@ -171,7 +171,7 @@ def _version_tuple(v):
 
 
 # 内置主题种子（_zip_theme_meta / _upgrade_builtins / seed_builtin_themes）已随换肤功能
-# 于 2026-09-20 整体移除。动态壁纸改由 DSH 插件 dsh-plugin-wallpaper-engine 承担。
+# 于 2026-09-20 整体移除。动态壁纸改为参考 dsh-wallpaper-engine 契约实现的适配层。
 
 
 MAX_LOG_ERR_REPEAT = 6   # 同一异常文本连续记录上限，防止后台线程刷爆日志
@@ -733,7 +733,7 @@ def themes_payload():
                    "note": "换肤已移除，动态背景请用 DSH 插件 dsh-plugin-wallpaper-engine"})
 
 
-# ---------------- 动态壁纸（对接 DSH 插件 dsh-plugin-wallpaper-engine） ----------------
+# ---------------- 动态壁纸（参考 dsh-wallpaper-engine 契约实现对接） ----------------
 def wallpaper_payload(fetch=True):
     """插件状态 + 壁纸清单（借 CDP 同源拉取）+ 可调参数。"""
     try:

@@ -15,8 +15,8 @@ v1.0，Windows + Python。
 > 设计思路：外部注入、零侵入、模块可单独开关、随时可完全还原。
 
 > **换肤已移除（2026-09-20）**：主题库 / 参数调优 / CSS 模板 / 预览 / 主题包安装全部删除，
-> 「动态背景」改由 DSH 侧插件 [`dsh-plugin-wallpaper-engine`](https://github.com/elysia395/dsh-wallpaper-engine)
-> 承担 —— 面板「动态壁纸」分区只做该插件的参数读写与壁纸清单展示。
+> 「动态壁纸」分区改为**参考** [`dsh-wallpaper-engine`](https://github.com/elysia395/dsh-wallpaper-engine)
+> 的接口契约实现 —— 对接其 `/wallpaper-engine/*` 路由做壁纸清单与参数读写。
 > 本工具保留：CDP 增强注入（含打标器）、会话管理、供应商配置、插件管理、诊断。
 > 老用户升级后跑一次 `python dsh-skin.py migrate` 即可清掉旧主题数据。
 
@@ -260,10 +260,11 @@ python dsh-skin.py enhance --apply              # 通过 CDP 立即生效（无�
 > **本地安全**：所有状态变更接口会校验 `Origin`/`Referer`，只接受本机来源，
 > 防止任意网页通过 `127.0.0.1` 调用接口（如结束你的 DeepSeek Harness 进程）。
 
-## 动态壁纸（dsh-plugin-wallpaper-engine）
+## 动态壁纸（参考 dsh-wallpaper-engine 契约实现）
 
-换肤移除后，「动态背景」由 DSH 侧插件 [`dsh-plugin-wallpaper-engine`](https://github.com/elysia395/dsh-wallpaper-engine)
-承担。DSH++ 只做**参数读写代理**，不接管渲染：
+换肤移除后，「动态背景」改由本工具的「动态壁纸」分区接管 —— 本项目**参考**
+[`dsh-wallpaper-engine`](https://github.com/elysia395/dsh-wallpaper-engine) 的接口契约，
+自行实现了一个适配层来对接它。DSH++ 只做**参数读写代理**，不接管渲染：
 
 - 面板「动态壁纸」分区列出插件提供的壁纸清单（video / scene / web / image 四类），
   选中即写回插件，插件热生效；

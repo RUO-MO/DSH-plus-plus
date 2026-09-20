@@ -157,7 +157,7 @@ def generate_marker_js(force_dark=False):
     """生成打标器 JS。
 
     force_dark 保留参数以兼容旧调用点；换肤移除后默认 False
-    （不再由 DSH++ 主动切换 DSH 明暗，交给 DSH 自身与壁纸插件）。
+    （不再由 DSH++ 主动切换 DSH 明暗，交由 DSH 自身与壁纸插件处理）。
     """
     fd = 'true' if force_dark else 'false'
     return r'''(function(){
