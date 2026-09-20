@@ -5,6 +5,13 @@ on:
     branches: [ main, master ]
   pull_request:
 
+# 测试脚本与控制台输出含中文。windows-latest runner 的默认控制台编码是
+# cp1252（西文），会让任何中文 print 抛 UnicodeEncodeError 并被误报为测试失败。
+# 这里统一强制 UTF-8；tests/run_all.py 亦会为子进程再设一次（双保险）。
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: '1'
+
 jobs:
   unit-tests:
     # DSHSkin 面向 Windows 桌面版（CDP/注册表/Electron），在 Windows 上验证
