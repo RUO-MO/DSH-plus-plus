@@ -27,7 +27,36 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PANEL = os.path.join(ROOT, 'panel.html')
-NODE = shutil.which('node') or r'C:\Users\mr\.workbuddy\binaries\node\versions\22.22.2-3\node.exe'
+
+
+def _find_node():
+    """定位 node 可执行文件，不硬编码任何本机绝对路径。
+
+    顺序：PATH 上的 node → 本机 WorkBuddy 托管 node（按版本目录探测）
+    → 常见安装位置 → 放弃（返回 None，相关用例自动跳过）。
+    """
+    exe = shutil.which('node')
+    if exe:
+        return exe
+    candidates = []
+    home = os.path.expanduser('~')
+    managed = os.path.join(home, '.workbuddy', 'binaries', 'node', 'versions')
+    if os.path.isdir(managed):
+        for ver in sorted(os.listdir(managed), reverse=True):
+            candidates.append(os.path.join(managed, ver, 'node.exe'))
+    candidates += [
+        r'C:\Program Files\nodejs\node.exe',
+        r'C:\Program Files (x86)\nodejs\node.exe',
+        '/usr/local/bin/node',
+        '/usr/bin/node',
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+NODE = _find_node()
 
 
 def _read(path):

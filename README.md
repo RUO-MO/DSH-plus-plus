@@ -1,5 +1,11 @@
 # DSH++ · DeepSeek Harness 增强工作台
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078d4.svg)](#)
+[![Python](https://img.shields.io/badge/python-3.9%2B-3776ab.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-21%20suites%20passing-brightgreen.svg)](#)
+[![Zero Intrusion](https://img.shields.io/badge/DSH%20repo-untouched-success.svg)](#安全性与可逆性)
+
 给 **DeepSeek Harness 桌面版（Electron）** 做「增强 + 会话/凭证管理 + 插件装配」的本地工作台
 （对标 codex++）：开发模式（`pnpm start:desktop`）与 **win-x64 打包版**开箱即用——
 **完全不修改 `deepseek-harness` 仓库里任何文件**——增强脚本经渲染进程
@@ -300,9 +306,20 @@ python dsh-skin.py enhance --apply              # 通过 CDP 立即生效（无�
 - **插件包校验**：zip-slip 穿越、解压炸弹（总量/单文件/成员数/压缩比）、字段正则
 - **绝不擅动进程**：DSH++ 永不自动拉起/重启桌面应用；守护线程（CDP 补注/漂移巡检/页面错误回收）只读 CDP 状态，只有面板里点「以注入模式重启」并确认后才会结束进程
 
+## 隐私说明
+
+本工具在本机运行，**不上传任何数据**：
+
+- 全流程只有 `127.0.0.1` 回环通信（后端 `:8765`、CDP `:9222`），无任何外部上报、遥测或统计接口
+- 会话内容与凭证**只读**：`session_store.py` 解析 DSH 会话文件用于展示/导出，导出与备份一律写到本工具自己的数据目录（`~/.dsh-skins`），绝不回写 DSH 数据
+- API Key 仅在内存中解密用于展示，落盘日志前统一打码；`server.token` 为每次启动随机生成的本机令牌
+- 本仓库源码内**不含任何真实密钥、凭证、会话内容或用户数据**（已做密钥模式扫描与历史审计）；`.gitignore` 已排除 `server.token`、`.dsh-skins/`、`.workbuddy/` 等运行时产物
+
 ## 目录结构
 
 ```
+LICENSE           MIT 许可证
+README.md         本文件
 dsh-skin.py       CLI 主入口（restore/migrate/uninstall/detect/deps/doctor/probe/
                    selectors/enhance/launch/update）
 dsh_env.py        环境解析唯一真源：数据目录 / 配置读写 / CDP 端口 / 进程检测 / 启动器（corepack pnpm / 打包版 exe）
@@ -403,3 +420,7 @@ desktopProject/desktopPatch 字段会显示当前模式实际写入的目标。
 
 **全局 pnpm 启动崩（Node v20）？**
 用 `启动DeepSeekHarness.bat` 或面板启动，内部已自动切换到 corepack pnpm + Node 22+。
+
+## 许可证
+
+[MIT](LICENSE) © 2026 RUO-MO

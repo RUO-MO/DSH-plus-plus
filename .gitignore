@@ -20,6 +20,11 @@ _backup/
 .build-archive/
 _work/
 
+# ---- 已移除功能的代码归档 ----
+# _before_skin_removal/ 是换肤功能移除前的归档（零代码引用），
+# 仅保留在本地以便追溯，不入仓库。
+_before_skin_removal/
+
 # ---- 运行时日志 / 本机令牌 ----
 *.log
 *.old.json
