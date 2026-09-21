@@ -196,6 +196,12 @@ def skin_root_audit():
         # （例如测试留下的 server.token）不算数据根，不参与告警，否则体检全是噪音。
         info['has_config'] = os.path.isfile(os.path.join(path, 'config.json'))
         info['has_data'] = bool(info['has_config'] or info['plugin_count'])
+        # 指针载体（默认根）判定：POINTER_CONFIG 通常就落在默认根里。它的职责只是
+        # 承载 skin_root 指针 —— 一旦指针生效，这个目录就**永久不再被写入**，
+        # 若照样按「长期未写入的其它数据根」告警，清理完也会天天报，纯属噪音。
+        # 所以：只有当它里面还躺着真数据（插件注册表 / 主题）时才告警。
+        info['pointer_carrier'] = (os.path.normcase(os.path.dirname(pointer_file))
+                                   == os.path.normcase(path))
         rows.append(info)
 
     env_skin = os.environ.get('DSH_SKIN_ROOT') or registry_env.get('DSH_SKIN_ROOT')
@@ -223,6 +229,9 @@ def skin_root_audit():
                         .format(configured_home, dsh_home))
     for row in rows:
         if row['active'] or not row['exists'] or not row['has_data']:
+            continue
+        # 指针载体已收敛成「只放指针」时不再告警；残留插件/主题说明它还是真数据根。
+        if row['pointer_carrier'] and not row['plugin_count'] and not row['themes']:
             continue
         if row['age_days'] is not None and row['age_days'] > 2:
             warnings.append('存在长期未写入的其它数据根：{0}（{1:.0f} 天前最后写入，'

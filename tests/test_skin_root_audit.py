@@ -165,6 +165,65 @@ class WarningRules(AuditBase):
         self.assertEqual(audit['warnings'], [], '只有一个数据根时不应有任何告警')
 
 
+class PointerCarrierNotFlagged(AuditBase):
+    """指针载体（默认根）长期不写入是**预期形态**，不该被当成「另一份数据根」。
+
+    实机背景：`~/.dsh-skins` 是 `skin_root` 指针的载体。指针一旦生效，这个目录就
+    永久不再被写入 —— 若照样按「长期未写入」告警，清理干净后每天都会报，纯属噪音。
+    这是 2026-09-21 清理旧根时暴露出来的误报：清理干净后审计仍持续报警，
+    会让人以为没清干净。所以只有它里面还留着真数据（插件注册表 / 主题）时才告警。
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.carrier = os.path.join(self.tmp, 'carrier')
+        os.makedirs(self.carrier, exist_ok=True)
+        E.POINTER_CONFIG = os.path.join(self.carrier, 'config.json')
+        E.discover_skin_roots = lambda: [
+            {'dir': self.active, 'origins': ['生效根']},
+            {'dir': self.carrier, 'origins': ['默认根（指针载体）']},
+        ]
+
+    def _write_carrier(self, cfg):
+        self._write_json(E.POINTER_CONFIG, cfg)
+        old = time.time() - 30 * 86400
+        os.utime(E.POINTER_CONFIG, (old, old))
+        # 目录新鲜度取「关键文件 mtime 的最大值」，所以放入 carrier 的每个探测文件
+        # 都要一起改时间，否则刚写入的那个会把整根拉成「刚刚写过」。
+        registry = os.path.join(self.carrier, 'plugins', 'registry.json')
+        if os.path.isfile(registry):
+            os.utime(registry, (old, old))
+        os.utime(self.carrier, (old, old))
+
+    def test_flag_is_set(self):
+        self._write_carrier({'skin_root': self.active})
+        rows = {r['dir']: r for r in E.skin_root_audit()['candidates']}
+        self.assertTrue(rows[self.carrier]['pointer_carrier'])
+        self.assertFalse(rows[self.active]['pointer_carrier'],
+                         '生效根不是指针载体，标记必须为假')
+
+    def test_clean_pointer_carrier_does_not_warn(self):
+        self._write_carrier({'config_version': 1, 'skin_root': self.active})
+        audit = E.skin_root_audit()
+        self.assertFalse([w for w in audit['warnings'] if self.carrier in w],
+                         '只剩指针的载体目录不构成根分裂，不能告警')
+
+    def test_carrier_leftover_themes_still_warns(self):
+        self._write_carrier({'skin_root': self.active, 'themes': {'inkwell': {}}})
+        audit = E.skin_root_audit()
+        self.assertTrue([w for w in audit['warnings'] if self.carrier in w],
+                        '载体里还躺着主题说明它仍是真数据根，必须告警')
+
+    def test_carrier_leftover_plugins_still_warns(self):
+        os.makedirs(os.path.join(self.carrier, 'plugins'), exist_ok=True)
+        self._write_json(os.path.join(self.carrier, 'plugins', 'registry.json'),
+                         {'plugins': {'x': {}}})
+        self._write_carrier({'skin_root': self.active})
+        audit = E.skin_root_audit()
+        self.assertTrue([w for w in audit['warnings'] if self.carrier in w],
+                        '载体里还有插件注册表时必须告警')
+
+
 class Discovery(unittest.TestCase):
     """真实 discover_skin_roots 的去重 / 排序行为（仅桩掉 SKIN_ROOT 与注册表）。"""
 

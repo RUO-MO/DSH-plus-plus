@@ -412,7 +412,10 @@ def doctor():
             envirs.get('DSH_HOME') or '（未设置）',
             envirs.get('DSH_SKIN_ROOT') or '（未设置）'))
         others = [row for row in audit['candidates']
-                  if not row['active'] and row['has_data']]
+                  if not row['active'] and row['has_data']
+                  # 只承载指针的默认根是预期形态，不算「另一份数据根」
+                  and not (row['pointer_carrier'] and not row['plugin_count']
+                           and not row['themes'])]
         if others:
             print('  其它数据根: {0} 个（均非活跃）'.format(len(others)))
             for row in others:
