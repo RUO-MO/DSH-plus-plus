@@ -1164,6 +1164,100 @@ class Handler(BaseHTTPRequestHandler):
         self._cors()
         self.end_headers()
 
+    # ---------------- 壁纸媒体供给 ----------------
+    def _wallpaper_asset(self, path):
+        """`GET /api/wallpaper/asset/<kind>/<id>` —— 供壁纸媒体字节。
+
+        为什么由本工具供给而不是走插件路由：插件把媒体挂在它自己的
+        `/wallpaper-engine/media/<token>` 上，token 只存在于插件进程内存，
+        且那条路由受 DSH 的 Host/Origin 栅栏保护，外部进程无法直连。
+        本工具的后端本来就有文件系统权限，直接读文件返回即可。
+
+        **免 token**：`<img src>` / `<video src>` 无法携带自定义请求头，
+        若要求 `X-DSHSkin-Token`，所有缩略图与视频都会裂图。
+
+        安全边界：`id` 必须过 `we_scanner` 的白名单正则，且路径只从**已扫描
+        到的壁纸路径表**中取 —— 调用方无法传入任意路径，免疫路径穿越。
+        暴露面与本机同用户的文件读取权限相同，未新增越权能力。
+        """
+        rest = path[len('/api/wallpaper/asset/'):]
+        parts = [seg for seg in rest.split('/') if seg]
+        if len(parts) != 2:
+            return self._json(api_err('asset 路径应形如 /api/wallpaper/asset/<kind>/<id>'), 404)
+        kind, wid = parts
+        if kind not in ('media', 'preview'):
+            return self._json(api_err('kind 只能是 media 或 preview'), 404)
+        try:
+            import we_scanner
+            source, ctype = we_scanner.media_file(wid, kind)
+        except Exception as exc:
+            return self._json(api_err('解析壁纸媒体失败：{0}'.format(exc)), 500)
+        if not source:
+            label = '预览图' if kind == 'preview' else '媒体文件'
+            return self._json(api_err('未找到壁纸 {0} 的{1}'.format(wid, label)), 404)
+        self._send_local_file(source, ctype)
+
+    def _send_local_file(self, source, ctype):
+        """流式发送本地文件，支持单段 Range（视频拖动进度需要 206）。"""
+        import email.utils
+        try:
+            info = os.stat(source)
+        except OSError:
+            return self._json(api_err('媒体文件已不可读'), 404)
+
+        etag = '"{0:x}-{1:x}"'.format(int(info.st_mtime), info.st_size)
+        if self.headers.get('If-None-Match') == etag:
+            self.send_response(304)
+            self.send_header('ETag', etag)
+            self._cors()
+            self.end_headers()
+            return
+
+        start, end, status = 0, info.st_size - 1, 200
+        rng = self.headers.get('Range')
+        if rng:
+            m = re.match(r'^bytes=(\d*)-(\d*)$', rng.strip())
+            if m and (m.group(1) or m.group(2)):
+                if m.group(1):
+                    start = int(m.group(1))
+                    if m.group(2):
+                        end = min(int(m.group(2)), info.st_size - 1)
+                else:
+                    start = max(0, info.st_size - int(m.group(2)))
+                if start >= info.st_size or start > end:
+                    self.send_response(416)
+                    self.send_header('Content-Range', 'bytes */{0}'.format(info.st_size))
+                    self._cors()
+                    self.end_headers()
+                    return
+                status = 206
+
+        self.send_response(status)
+        self.send_header('Content-Type', ctype)
+        self.send_header('Content-Length', str(end - start + 1))
+        self.send_header('Accept-Ranges', 'bytes')
+        self.send_header('ETag', etag)
+        self.send_header('Last-Modified', email.utils.formatdate(info.st_mtime, usegmt=True))
+        # 壁纸媒体按 mtime 失效即可：允许浏览器缓存，避免每次重传几十 MB 视频
+        self.send_header('Cache-Control', 'private, max-age=300')
+        if status == 206:
+            self.send_header('Content-Range', 'bytes {0}-{1}/{2}'.format(start, end, info.st_size))
+        self._cors()
+        self.end_headers()
+
+        remaining = end - start + 1
+        try:
+            with open(source, 'rb') as handle:
+                handle.seek(start)
+                while remaining > 0:
+                    chunk = handle.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            pass
+
     def _head_probe(self):
         path = urlparse(self.path).path
         status, ctype, length = 200, 'text/html; charset=utf-8', 0
@@ -1220,6 +1314,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/wallpaper':
             fetch = (qs.get('fetch') or ['1'])[0] not in ('0', 'false', 'no')
             return self._json(wallpaper_payload(fetch=fetch))
+        # 壁纸媒体字节（预览图 / 视频）。**必须在敏感路径检查之外**：
+        # <img src> / <video src> 无法携带自定义请求头，加 token 会整片裂图。
+        if path.startswith('/api/wallpaper/asset/'):
+            return self._wallpaper_asset(path)
         if path == '/api/status':
             return self._json(status_payload())
         if path == '/api/detect':

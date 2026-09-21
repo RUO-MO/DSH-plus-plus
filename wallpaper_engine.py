@@ -4,13 +4,21 @@
 背景（2026-09-20 换肤移除后）：
   DSH++ 不再自带换肤引擎，「动态背景」改为在「动态壁纸」分区内**参考**
   `dsh-wallpaper-engine`（https://github.com/elysia395/dsh-wallpaper-engine）
-  的接口契约自行实现一个适配层来对接它。本模块只做三件事：
-    1. 探测插件是否已装（读 DSH profile 的 node_modules）；
-    2. 读 / 写插件的 settings —— **读写都优先走插件的 HTTP 路由**
-       （GET/PUT `/wallpaper-engine/settings`），而不是直接改 config.json；
-    3. 通过 CDP 在 DSH 页面里同源 fetch 插件的 `/wallpaper-engine/*` 路由，
-       拿 inventory（壁纸清单）——插件路由挂在 DSH 自己的 webserver 上，
-       端口随机（--port 0），外部进程无法直连，只能借页面同源请求。
+  的接口契约自行实现一个适配层来对接它。本模块分「读取」与「应用」两侧：
+
+  **读取侧 —— 不依赖 DSH（2026-09-21 架构修正）**
+    1. 扫描本机 Wallpaper Engine 目录拿壁纸清单，委托 `we_scanner`
+       （纯文件系统：Steam 注册表 → WE 安装目录 → 逐个 project.json）。
+       清单本质是本机磁盘信息，不需要 DSH 参与，也不该受调试端口开关影响。
+       此前把这一步错接在 CDP 上（借 DSH 页面同源 fetch 插件的 `/inventory`），
+       导致 DSH 未开 `--remote-debugging-port` 时清单整个不可用且无降级。
+
+  **应用侧 —— 这才涉及 DSH**
+    2. 探测插件是否已装（读 DSH profile 的 node_modules）；
+    3. 读 / 写插件的 settings —— 优先走插件 HTTP 路由（GET/PUT
+       `/wallpaper-engine/settings`），不可达时降级直改 config.json。
+       插件路由挂在 DSH 自己的 webserver 上（随机端口）且受 Host/Origin 栅栏
+       保护，外部进程无法直连，故写操作仍保留 CDP 通道与文件降级两条路。
 
 为什么写操作走 PUT 而不是直接改文件（2026-09-20 修）：
   插件在 `enqueueConfigWrite()` 里把「读-改-写三步」串行化，避免并发写吞改动。
@@ -412,15 +420,44 @@ def _write_root(root):
 
 
 # ---------------- inventory ----------------
-def fetch_inventory(timeout=8.0):
-    """经 CDP 同源请求插件 inventory；返回 dict 或 {'ok':False,'err':...}。"""
+def fetch_inventory(timeout=8.0, source='local'):
+    """取壁纸清单。
+
+    **读取侧已改为本地磁盘扫描（2026-09-21）**：壁纸清单是纯文件系统信息
+    （遍历 Steam 目录 + 解析各 project.json），不需要 DSH 参与。此前经 CDP
+    借页面同源请求插件 `/wallpaper-engine/inventory` 路由，导致 DSH 未开启
+    `--remote-debugging-port` 时清单整个不可用且**没有任何降级**（settings 有、
+    inventory 没有）。现由 `we_scanner` 直接读盘，与 DSH 是否运行无关。
+
+    :param timeout: 仅 `source='plugin'` 时使用（CDP 请求超时）
+    :param source: `'local'`（默认，本地扫描）或 `'plugin'`（经 CDP 拉插件
+        路由 —— 保留用于与插件结果逐项对照排查，非默认路径）
+    :returns: `{'ok': True, 'inventory': {...}, 'via': 'local'|'plugin'}`
+        或 `{'ok': False, 'err': str}`
+    """
+    if source == 'plugin':
+        return _fetch_inventory_via_plugin(timeout=timeout)
+    try:
+        import we_scanner
+        inventory = we_scanner.scan_inventory()
+    except Exception as exc:                     # 扫描失败也要给可读原因
+        return {'ok': False, 'err': '本地扫描壁纸目录失败：{0}'.format(exc)}
+    return {'ok': True, 'inventory': inventory, 'via': 'local'}
+
+
+def _fetch_inventory_via_plugin(timeout=8.0):
+    """经 CDP 同源请求插件的 inventory 路由（保留路径，用于结果对照）。
+
+    插件路由挂在 DSH 自己的 webserver 上（端口随机），且受 Host/Origin
+    反 DNS-rebinding 栅栏保护，外部进程无法直连 —— 只能借页面上下文发起。
+    """
     res = _cdp_request('GET', BASE_PATH + '/inventory', timeout=timeout)
     if not res.get('ok'):
         return {'ok': False, 'err': res.get('err')}
     data = res.get('data')
     if not isinstance(data, dict):
         return {'ok': False, 'err': 'inventory 结构异常'}
-    return {'ok': True, 'inventory': data}
+    return {'ok': True, 'inventory': data, 'via': 'plugin'}
 
 
 def _media_url(rel):
@@ -436,7 +473,12 @@ def _media_url(rel):
 
 
 def inventory_payload(fetch=True):
-    """面板用：插件状态 + settings + （可选）壁纸清单。"""
+    """面板用：插件状态 + settings + （可选）本机壁纸清单。
+
+    注意 `inventory` **不以插件是否安装为前提** —— 壁纸清单来自本机 Steam 上的
+    Wallpaper Engine，读取与插件无关（2026-09-21 架构修正）。`plugin.installed`
+    只表示 DSH 侧是否装有该插件，影响的是「应用」而非「读取」。
+    """
     st = plugin_status()
     src = fetch_settings() if fetch else {'settings': load_settings(), 'source': 'file'}
     settings = src.get('settings') or {}
@@ -454,13 +496,10 @@ def inventory_payload(fetch=True):
                     for k, l, dflt in TOGGLES],
         'colors': [{'key': k, 'label': l, 'default': dflt}
                    for k, l, dflt in COLORS],
-        'note': '动态壁纸参考 {0} 契约实现对接；本页做状态查看与参数读写'.format(PLUGIN_NAME),
+        'note': '壁纸清单直接扫描本机 Wallpaper Engine 目录；参数读写对接 {0}'.format(PLUGIN_NAME),
     }
     if src.get('route_err'):
         out['settings_route_err'] = src['route_err']
-    if not st['installed']:
-        out['inventory'] = None
-        return out
     if fetch:
         res = fetch_inventory()
         if not res.get('ok'):
@@ -468,13 +507,25 @@ def inventory_payload(fetch=True):
             out['inventory_err'] = res.get('err')
         else:
             out['inventory'] = _slim_inventory(res['inventory'])
+            out['inventory_via'] = res.get('via')
+    else:
+        out['inventory'] = None
     return out
 
 
 def _slim_inventory(inv):
-    """瘦身 inventory：媒体 URL 绝对化，只留面板需要的字段。"""
+    """瘦身 inventory：只留面板需要的字段。
+
+    媒体 URL 的处理取决于清单来源：
+      - **本地扫描**（`source == 'local'`）：已是本工具的
+        `/api/wallpaper/asset/<kind>/<id>` 相对路径，与后端同源，保持原样；
+      - **插件路由**：是 `/wallpaper-engine/<seg>/<token>`，token 只存在于插件
+        进程内存里，必须借 CDP 页面 origin 绝对化才能被面板加载。
+    """
     if not isinstance(inv, dict):
         return None
+    local = inv.get('source') == 'local'
+    resolve = (lambda value: value) if local else _media_url
     walls = []
     for w in (inv.get('wallpapers') or []):
         if not isinstance(w, dict):
@@ -485,12 +536,12 @@ def _slim_inventory(inv):
             'type': w.get('type'),
             'contentrating': w.get('contentrating'),
             'playable': bool(w.get('playable')),
-            'preview': _media_url(w.get('preview')),
-            'media': _media_url(w.get('media')),
-            'frameUrl': _media_url(w.get('frameUrl')),
+            'preview': resolve(w.get('preview')),
+            'media': resolve(w.get('media')),
+            'frameUrl': resolve(w.get('frameUrl')),
             # Scene 类型专属：实时 WebGL 播放器 + 抽帧出来的 MP4
-            'sceneUrl': _media_url(w.get('sceneUrl')),
-            'sceneVideo': _media_url(w.get('sceneVideo')),
+            'sceneUrl': resolve(w.get('sceneUrl')),
+            'sceneVideo': resolve(w.get('sceneVideo')),
         })
     return {
         'installDir': inv.get('installDir'),
@@ -499,6 +550,9 @@ def _slim_inventory(inv):
         'portableCount': inv.get('portableCount'),
         'wallpapers': walls,
         'playlists': inv.get('playlists') or [],
+        # 本地扫描会带上来源与诊断信息，透传给面板便于排查
+        'source': inv.get('source'),
+        'details': inv.get('details'),
     }
 
 
@@ -520,7 +574,9 @@ def active_wallpaper():
     for w in (res['inventory'].get('wallpapers') or []):
         if isinstance(w, dict) and w.get('id') == sid:
             w = dict(w)
-            w['preview'] = _media_url(w.get('preview'))
+            # 本地扫描给的已是同源相对路径，不要再拼 CDP origin
+            if res.get('via') != 'local':
+                w['preview'] = _media_url(w.get('preview'))
             w['resolved'] = True
             return w
     return {'id': sid, 'title': None, 'resolved': False, 'preview': None}

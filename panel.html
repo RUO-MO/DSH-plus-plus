@@ -2386,31 +2386,30 @@ button,input,textarea,select{font:inherit;color:inherit}
     }
 
     const plugin = st.plugin || {};
-    if (!plugin.installed) {
-      if (sub) sub.textContent = '未检测到 DSH 插件 dsh-plugin-wallpaper-engine';
-      grid.innerHTML =
-        '<div class="load-error">未检测到插件 <b>dsh-plugin-wallpaper-engine</b>。<br>' +
-        '请在 DSH 的插件市场中安装后刷新本页。<br>' +
-        '<span style="opacity:.7">仓库：github.com/elysia395/dsh-wallpaper-engine</span></div>';
-      if (foot) foot.textContent = '未安装插件';
-      renderWallpaperInspector();
-      return;
-    }
+    // 清单来自本机扫描（we_scanner），与插件是否安装**无关**；插件缺失只影响「应用」这一步。
+    // 故这里不再提前 return —— 没装插件也要能把本机壁纸列出来。
+    const pluginMissing = !plugin.installed;
 
     const inv = st.inventory;
     const all = (inv && inv.wallpapers) || [];
     const settings = st.settings || {};
     const activeId = settings.id;
+    const srcLabel = (inv && inv.source === 'local') ? '本机扫描' : '插件接口';
 
     if (sub) {
-      sub.textContent = `插件 v${plugin.version || '?'} · profile ${plugin.profile || '?'}` +
-        (inv ? ` · 共 ${all.length} 张（可播放 ${inv.portableCount}）` : ' · 清单不可用');
+      sub.textContent = pluginMissing
+        ? '未装 dsh-plugin-wallpaper-engine（仅可浏览，无法应用）' +
+          (inv ? ` · ${srcLabel} · 共 ${all.length} 张` : ' · 清单不可用')
+        : `插件 v${plugin.version || '?'} · profile ${plugin.profile || '?'}` +
+          (inv ? ` · ${srcLabel} · 共 ${all.length} 张（可播放 ${inv.portableCount}）` : ' · 清单不可用');
     }
 
     if (!inv) {
       grid.innerHTML = '<div class="load-error">无法读取壁纸清单：' +
         String(st.inventory_err || '未知原因').replace(/</g, '&lt;') +
-        '<br><span style="opacity:.7">插件清单经 DSH 页面同源接口读取，需要 DSH 正在运行且已开调试端口。</span></div>';
+        '<br><span style="opacity:.7">清单由本工具直接扫描本机 Wallpaper Engine 目录，' +
+        '不依赖 DSH 运行。若提示找不到安装目录，请确认已装 Wallpaper Engine' +
+        '（Steam appid 431960）。</span></div>';
       if (foot) foot.textContent = '清单不可用';
       renderWallpaperInspector();
       return;
@@ -2428,14 +2427,22 @@ button,input,textarea,select{font:inherit;color:inherit}
         String(w.id || '').toLowerCase().includes(q));
     }
 
+    const missingBanner = pluginMissing
+      ? '<div class="list-empty" style="text-align:left;padding:8px 10px">' +
+        '未检测到 <b>dsh-plugin-wallpaper-engine</b> —— 可浏览本机壁纸，但「应用」不可用。' +
+        '请在 DSH 的插件市场中安装后刷新本页。' +
+        '<span style="opacity:.7">（github.com/elysia395/dsh-wallpaper-engine）</span></div>'
+      : '';
+
     if (!list.length) {
-      grid.innerHTML = `<div class="list-empty">${all.length ? '没有匹配的壁纸' : '壁纸库为空（Wallpaper Engine 未装壁纸或未扫描到）'}</div>`;
+      grid.innerHTML = missingBanner +
+        `<div class="list-empty">${all.length ? '没有匹配的壁纸' : '壁纸库为空（Wallpaper Engine 未装壁纸或未扫描到）'}</div>`;
       if (foot) foot.textContent = all.length ? `0 / ${all.length} 张` : '0 张';
       renderWallpaperInspector();
       return;
     }
 
-    grid.innerHTML = list.map(w => {
+    grid.innerHTML = missingBanner + list.map(w => {
       const sel = (w.id === selectedWallpaperId) ? ' on' : '';
       const isActive = (w.id === activeId);
       const thumb = w.preview

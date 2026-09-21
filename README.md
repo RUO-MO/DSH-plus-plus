@@ -16,7 +16,8 @@ v1.0，Windows + Python。
 
 > **换肤已移除（2026-09-20）**：主题库 / 参数调优 / CSS 模板 / 预览 / 主题包安装全部删除，
 > 「动态壁纸」分区改为**参考** [`dsh-wallpaper-engine`](https://github.com/elysia395/dsh-wallpaper-engine)
-> 的接口契约实现 —— 对接其 `/wallpaper-engine/*` 路由做壁纸清单与参数读写。
+> 的接口契约实现。壁纸清单由本工具**直接扫描本机 Wallpaper Engine 目录**得到（纯文件系统，
+> 见 `we_scanner.py`）；只有「把选中壁纸写回插件 settings」这一步对接其 `/wallpaper-engine/*` 路由。
 > 本工具保留：CDP 增强注入（含打标器）、会话管理、供应商配置、插件管理、诊断。
 > 老用户升级后跑一次 `python dsh-skin.py migrate` 即可清掉旧主题数据。
 
@@ -44,7 +45,7 @@ v1.0，Windows + Python。
 | **启动桌面版（开发模式）** | 双击 `启动DeepSeekHarness.bat`（自动用 corepack pnpm + Node22+ 启动，自带 CDP 9222） |
 | **启动打包版（win-x64）** | 双击 `启动打包版.bat`（先 taskkill 旧实例，再以 `--remote-debugging-port=9222` 拉起打包 exe） |
 | **可视化面板** | 双击 `启动面板.bat`，浏览器打开 http://127.0.0.1:8765/ |
-| **调整动态壁纸** | 面板「动态壁纸」分区切换壁纸 / 调参（需已装 dsh-plugin-wallpaper-engine 并运行 DSH） |
+| **调整动态壁纸** | 面板「动态壁纸」分区浏览壁纸 / 调参（清单直接扫本机磁盘；**切换生效**需 DSH 运行且已装 dsh-plugin-wallpaper-engine） |
 | **写增强脚本** | 面板「增强器 → 新建用户脚本」，或把 `.js` 丢进 `~/.dsh-skins/enhance/` |
 | **应用增强（热生效）** | 面板「应用增强（CDP）」/ `python dsh-skin.py enhance --apply` |
 | **还原官方样式** | 双击 `还原官方样式.bat`，或面板「还原官方」 |
@@ -264,10 +265,41 @@ python dsh-skin.py enhance --apply              # 通过 CDP 立即生效（无�
 
 换肤移除后，「动态背景」改由本工具的「动态壁纸」分区接管 —— 本项目**参考**
 [`dsh-wallpaper-engine`](https://github.com/elysia395/dsh-wallpaper-engine) 的接口契约，
-自行实现了一个适配层来对接它。DSH++ 只做**参数读写代理**，不接管渲染：
+自行实现了一个适配层来对接它。这里有一条容易混淆的界线，先讲清：
 
-- 面板「动态壁纸」分区列出插件提供的壁纸清单（video / scene / web / image 四类），
-  选中即写回插件，插件热生效；
+| 环节 | 本质 | 依赖 |
+|---|---|---|
+| **读取壁纸清单** | 遍历本机磁盘、解析各壁纸的 `project.json` | **纯文件系统**，与 DSH 无关 |
+| **应用壁纸** | 把选中的 id 写进插件 settings，让 DSH 换背景 | 需要 DSH 运行 + 插件已装 |
+
+### 壁纸清单从哪来（读取侧）
+
+**壁纸不是插件自带的，也不是 DSH 提供的 —— 它来自你本机的 Steam 上的
+[Wallpaper Engine](https://store.steampowered.com/app/431960/)（Steam appid `431960`）。**
+`we_scanner.py` 直接扫盘枚举，共四个来源目录：
+
+1. `<WE 安装目录>/projects/defaultprojects` —— WE 自带示例壁纸
+2. `<WE 安装目录>/projects/myprojects` —— 你自己制作/导入的壁纸
+3. `<各 Steam 库>/steamapps/workshop/content/431960` —— **创意工坊订阅**（日常用的多是这类）
+4. `<上传目录>` —— 插件自己的 uploads（默认 `~/.dsh-wallpaper-engine/uploads`）
+
+定位过程同样是纯读操作：注册表 `HKCU\Software\Valve\Steam` 的 `SteamPath` →
+环境变量 → 常见安装目录 → 解析 `steamapps/libraryfolders.vdf` 拿到全部 Steam 库。
+逐行对照插件 v0.7.3 `lib/index.js` 实现，函数映射表见 `we_scanner.py` 模块文档。
+
+> 插件（宿主端 `lib/index.js`）为什么不直接这样读、而要多挂一层 HTTP 路由？
+> 因为它是「宿主端 + 浏览器端」双半结构，浏览器受沙箱限制读不了本地文件，
+> 宿主端必须把扫描结果经 `/wallpaper-engine/inventory` 路由喂给它
+> （插件 README 原话：注册该路由是"供浏览器端获取"，并说明"插件直接扫描磁盘"）。
+> 本工具的扫描器跑在 DSH++ 的 Python 后端里，**本身就有文件系统权限**，故无需那层 HTTP。
+> 这样也修掉了此前的一个缺陷：清单曾借 CDP 从页面内请求插件路由，导致 DSH 未开
+> `--remote-debugging-port` 时清单整个不可用且没有降级。
+
+### 参数与写入路径（应用侧）
+
+- 面板「动态壁纸」分区列出扫到的壁纸（video / scene / web / image 四类），选中即写回插件热生效；
+- 缩略图与预览媒体由本工具后端按 id 供给（`/api/wallpaper/asset/<id>/<media|preview>`），
+  带 `ETag` / `Range` 支持（scene 预览视频可拖动进度），媒体路径已做白名单 + 目录双重校验防穿越；
 - 参数分四组暴露，边界**与插件 `sanitizeSettings()` 的 clamp 逐项对齐**，并主动夹紧：
   - **滑杆 15 项**：遮罩浓度 / 玻璃边框 / 界面背景模糊 / 壁纸模糊 / 壁纸不透明度 /
     亮度 / 对比度 / 饱和度 / 播放倍速 / 玻璃通透度 / 侧栏模糊 / 侧栏通透度 /
@@ -276,16 +308,14 @@ python dsh-skin.py enhance --apply              # 通过 CDP 立即生效（无�
   - **颜色 6 项**：强调色 / 玻璃底色 / 侧栏底色 / 侧栏文字色 / 文字颜色 / 光标颜色
   - **开关 11 项**：轮播 / 隐藏时暂停 / 失焦时暂停 / 电池时暂停 / 水平翻转 / Edge 兼容 /
     玻璃窗口 / 侧栏玻璃 / 显示吉祥物 / 自定义字体 / 场景动画(β)
-- Scene 场景壁纸优先用插件抽帧出的 MP4 预览（硬件解码流畅），可一键打开插件 WebGL 播放器实时预览；
-- 插件路由挂在 DSH 内部的随机环回口，**外部进程无法直连**，
-  故本工具通过 CDP 在页面上下文内同源请求（见 `wallpaper_engine.py`）；
+- Scene 场景壁纸优先用插件抽帧出的 MP4 预览（硬件解码流畅），可一键打开插件 WebGL 播放器实时预览。
 
-### 写入路径
-
-**优先 `PUT /wallpaper-engine/settings`**，复用插件自己的 `enqueueConfigWrite()`
+**写入优先级**：优先 `PUT /wallpaper-engine/settings`，复用插件自己的 `enqueueConfigWrite()`
 串行队列与 `sanitizeSettings()` 校验，响应即已持久化。
 仅当该路由不可达（DSH 未开调试端口 / 插件未加载）时，才降级为原子直写
 `~/.dsh-wallpaper-engine/config.json`，并在面板日志中明确标注「降级写入」。
+插件路由挂在 DSH 自己的 webserver 上（端口随机）且受 DSH 的 Host/Origin
+反 DNS-rebinding 栅栏保护，外部进程无法直连 —— 故写操作保留 CDP 同源请求与文件降级两条路。
 
 > ⚠️ 插件用 `clampNum(v,lo,hi,fb)`，越界值是**回落默认值而非夹紧**。
 > 故本工具必须先自行夹紧到 `[lo,hi]`，否则用户拖过边界会被插件悄悄重置成默认值
@@ -327,7 +357,8 @@ dsh_env.py        环境解析唯一真源：数据目录 / 配置读写 / CDP �
 marker_engine.py  运行时打标器 + 区域选择器契约（原 theme_engine 剥离，换肤移除后独立）
 cdp_skin.py       CDP 注入引擎：CSS + JS 运行时、内容指纹、target 兜底、守护补注
 enhance_engine.py 增强引擎：内置模块装载 / 用户脚本 / 用户 CSS / DSHSkin 运行时生成
-wallpaper_engine.py 动态壁纸插件适配层：探测状态 / 同源拉清单 / 经插件 PUT 路由读写参数
+we_scanner.py     Wallpaper Engine 本地扫描器：纯文件系统枚举壁纸（注册表→WE 目录→project.json），零 DSH/CDP 依赖
+wallpaper_engine.py 动态壁纸适配层：读取侧委托 we_scanner；应用侧经插件路由 / 文件降级读写参数
 plugin_manager.py cordis 插件管理：安装/启停/配置/托管块还原
 session_store.py  v2 只读通道：DSH 会话（zstd-JSONL 解析/导出/备份）+ 凭证（读取打码/备份）
 enhance-modules/  内置增强模块 JS 源（会话工具 / 界面微调 / 输入增强 / 上下文用量）
@@ -335,7 +366,7 @@ market/           脚本市场内置脚本（front-matter 元数据，一键安�
 server.py         本地后端 127.0.0.1:8765（API、CDP 补注守护、漂移巡检、源码自重启）
 panel.html        工作台：概览 / 动态壁纸 / 会话 / 供应商 / 模型 / 上下文用量 / 增强 / 插件 / 市场 / 诊断 / 日志 / 设置
 assets/           真实快照页与官方 CSS（漂移巡检用）
-tools/            生成器与探针（gen_launchers.py / probe_live.py / 快照抓取）
+tools/            生成器与探针（gen_launchers.py / probe_live.py / we_scan_poc.py / 快照抓取）
 启动DeepSeekHarness.bat / 启动打包版.bat / 启动面板.bat / 还原官方样式.bat / 构建桌面应用.bat / _ensure_deps.bat
 build_desktop.spec   桌面应用构建配置（PyInstaller onefile，收集 panel.html/market/assets/enhance-modules/dsh-skin.py/tools）
 desktop_app.py       桌面应用入口：单实例锁 + 后端线程 + pywebview/Edge 独立窗口 + 托盘 + 降级链

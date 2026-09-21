@@ -16,8 +16,10 @@
   python dsh-skin.py --version               显示版本
 
 关于换肤（2026-09-20 变更）:
-  主题库 / 参数调优 / CSS 模板 / 预览 / 主题包安装已移除，「动态背景」改为
-  参考 dsh-wallpaper-engine 的接口契约实现对接适配层（走其 /wallpaper-engine/* 路由）。
+  主题库 / 参数调优 / CSS 模板 / 预览 / 主题包安装已移除，「动态背景」改由
+  「动态壁纸」分区接管 —— 壁纸清单直接扫描本机 Wallpaper Engine 目录
+  （we_scanner.py，纯文件系统，不需要 DSH 运行）；参数读写参考
+  dsh-wallpaper-engine 的接口契约实现（走其 /wallpaper-engine/* 路由）。
   本工具保留：CDP 增强注入（含打标器）、会话管理、供应商配置、插件管理、诊断。
   老用户升级后跑一次 `migrate` 即可清掉旧主题数据。
 
@@ -139,7 +141,8 @@ def migrate_cmd():
         print('[OK] 数据根下无主题目录残留')
     if r['dirs_kept']:
         print('[i] 已保留非主题目录: {0}'.format(', '.join(r['dirs_kept'])))
-    print('[i] 换肤已由 dsh-plugin-wallpaper-engine 取代；本工具保留增强/会话/插件等能力')
+    print('[i] 本工具不再自带换肤；「动态背景」改由「动态壁纸」分区接管'
+          '（清单本机扫描 + 参数读写）')
 
 
 
@@ -359,20 +362,42 @@ def doctor():
     print('  用户脚本: {0} 个 / 用户 CSS: {1} 个'.format(
         len(enh.get('scripts', [])), len(enh.get('styles', []))))
 
-    print('\n[6/6] 动态壁纸（dsh-plugin-wallpaper-engine）')
+    print('\n[6/6] 动态壁纸')
+    # 读取侧：本机磁盘扫描（纯文件系统，**不需要 DSH 运行**）
+    try:
+        import we_scanner
+        inv = we_scanner.scan_inventory()
+        if inv.get('installDir'):
+            from collections import Counter
+            tally = Counter((w.get('source') or '?')
+                            for w in (inv.get('wallpapers') or []))
+            print('  壁纸库: {0} 项（可播放 {1}）'.format(
+                inv.get('total'), inv.get('portableCount')))
+            if tally:
+                print('  来源  : {0}'.format('、'.join(
+                    '{0} {1}'.format(name, count) for name, count in tally.most_common())))
+            print('  安装  : {0}'.format(inv.get('installDir')))
+            print('  说明  : 清单由本机扫描得到，不需要 DSH 运行')
+        else:
+            print('  [!] 未找到 Wallpaper Engine 安装目录')
+            print('      请确认已装 WE（Steam appid 431960）；可用 DSH_WE_STEAM_ROOT 指定 Steam 根')
+    except Exception as e:
+        print('  [!] 扫描壁纸目录失败: {0}'.format(e))
+
+    # 应用侧：插件状态与当前在用壁纸（这一步才涉及 DSH）
     try:
         import wallpaper_engine
         wp = wallpaper_engine.plugin_status()
         if wp.get('installed'):
-            print('  插件: 已安装 v{0}（profile={1}）'.format(wp.get('version') or '?', wp.get('profile')))
-            print('  配置: {0}'.format(wp.get('config') or '（无）'))
+            print('  插件  : 已安装 v{0}（profile={1}）'.format(
+                wp.get('version') or '?', wp.get('profile')))
             if wp.get('config_exists'):
                 sets = wallpaper_engine.load_settings()
-                print('  当前壁纸 id: {0}'.format(sets.get('id') or '（未选择）'))
+                print('  使用中: {0}'.format(sets.get('id') or '（未选择）'))
             else:
                 print('  [!] 配置文件不存在 → 在 DSH 里打开一次动态壁纸面板即可生成')
         else:
-            print('  [i] 未检测到该插件；换肤功能已移除，「动态背景」请装 dsh-plugin-wallpaper-engine')
+            print('  [i] 未检测到该插件 → 只能浏览本机壁纸，无法应用到 DSH')
     except Exception as e:
         print('  [!] 读取壁纸插件状态失败: {0}'.format(e))
 
