@@ -1761,6 +1761,18 @@ button,input,textarea,select{font:inherit;color:inherit}
     return WALLPAPER_TYPE_LABEL[String(t || '').toLowerCase()] || (t || '未知');
   }
 
+  // 壁纸来源目录的可读名 —— 清单来自本机 Wallpaper Engine 的四个目录
+  const WALLPAPER_SOURCE_LABEL = {
+    workshop: '创意工坊',
+    defaultprojects: 'WE 自带',
+    myprojects: '自制',
+    uploads: '已上传',
+  };
+  function wallpaperSourceLabel(src) {
+    if (!src) return '';
+    return WALLPAPER_SOURCE_LABEL[src] || src;
+  }
+
   // === 从后端加载动态壁纸状态（含插件清单） ===
   async function loadWallpaper(fetchInventory) {
     const grid = document.getElementById('wallpaper-grid');
@@ -2452,14 +2464,23 @@ button,input,textarea,select{font:inherit;color:inherit}
         ${thumb}
         <div class="trow-text">
           <div class="trow-name" title="${String(w.title || '').replace(/"/g, '&quot;')}">${String(w.title || w.id || '').replace(/</g, '&lt;')}</div>
-          <div class="trow-meta">${wallpaperTypeLabel(w.type)}${w.playable ? '' : ' · 文件缺失'}${isActive ? ' · 使用中' : ''}</div>
+          <div class="trow-meta">${wallpaperTypeLabel(w.type)}${w.source ? ' · ' + wallpaperSourceLabel(w.source) : ''}${w.playable ? '' : ' · 文件缺失'}${isActive ? ' · 使用中' : ''}</div>
         </div>
         ${isActive ? '<span class="trow-badge">使用中</span>' : ''}
       </div>`;
     }).join('');
 
-    if (foot) foot.textContent = `${list.length} / ${all.length} 张` +
-      (activeId ? ` · 当前使用 ${activeId}` : ' · 未选择壁纸');
+    if (foot) {
+      // 来源分布：直接回答「这些壁纸从哪读来的」
+      const tally = {};
+      all.forEach(w => { if (w.source) tally[w.source] = (tally[w.source] || 0) + 1; });
+      const srcText = Object.keys(tally).length
+        ? ' · 来源 ' + Object.keys(tally)
+            .map(k => `${wallpaperSourceLabel(k)} ${tally[k]}`).join(' / ')
+        : '';
+      foot.textContent = `${list.length} / ${all.length} 张${srcText}` +
+        (activeId ? ` · 当前使用 ${activeId}` : ' · 未选择壁纸');
+    }
 
     if (!selectedWallpaperId && list.length) {
       selectedWallpaperId = activeId && list.some(w => w.id === activeId) ? activeId : list[0].id;

@@ -309,6 +309,14 @@ class SlimInventory(ScannerBase):
         self.assertEqual(slim['source'], 'local')
         self.assertIn('details', slim)
 
+    def test_entry_source_survives_slimming(self):
+        """逐条 source 必须穿过瘦身层 —— 面板要靠它标注「来自工坊 / 自有示例」。"""
+        slim = W._slim_inventory(S.scan_inventory())
+        by_id = {w['id']: w for w in slim['wallpapers']}
+        self.assertEqual(by_id['alpha']['source'], 'defaultprojects')
+        self.assertEqual(by_id['ws-001']['source'], 'workshop')
+        self.assertEqual(by_id['up-abc123']['source'], 'uploads')
+
 
 class FetchInventoryIsLocal(ScannerBase):
     """旧实现的核心缺陷：DSH 没开调试端口时清单整个不可用且无降级。"""

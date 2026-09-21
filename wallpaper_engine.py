@@ -535,6 +535,9 @@ def _slim_inventory(inv):
             'title': w.get('title') or w.get('id'),
             'type': w.get('type'),
             'contentrating': w.get('contentrating'),
+            # 来源目录（defaultprojects / myprojects / workshop / uploads）——
+            # 面板据此标注「来自工坊」等，别在这层丢掉。
+            'source': w.get('source'),
             'playable': bool(w.get('playable')),
             'preview': resolve(w.get('preview')),
             'media': resolve(w.get('media')),

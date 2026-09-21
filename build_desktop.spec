@@ -21,6 +21,9 @@ a = Analysis(
         ('tools', 'tools'),
     ],
     hiddenimports=[
+        # 函数体内 import 的模块，显式声明避免静态分析漏收
+        'we_scanner',
+        'wallpaper_engine',
         'webview.platforms.edgechromium',
         'clr_loader',
         'pythonnet',
