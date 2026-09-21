@@ -24,7 +24,8 @@
 
 契约来源
 --------
-逐行对照 dsh-plugin-wallpaper-engine v0.7.3 `lib/index.js` 实现（非 README）：
+逐行对照 dsh-plugin-wallpaper-engine v0.7.3 `lib/index.js` 实现（非 README）。
+v0.7.5 已复核：下列函数全部仍在，枚举来源与 `WE_APPID='431960'` 均未变，契约一致。
 
   ====================================  ==========================================
   本模块函数                             对应插件函数（index.js 行号）
