@@ -11,8 +11,10 @@ DSHSkin · 测试统一入口
     python tests/run_all.py -v         # 显示每个用例输出
 """
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,10 +51,21 @@ def main():
     child_env = os.environ.copy()
     child_env['PYTHONIOENCODING'] = 'utf-8'
     child_env['PYTHONUTF8'] = '1'
+
+    # 数据根隔离：`import server` / `import dsh_env` 会在模块级解析数据根并
+    # 创建目录、写 server.token（实测：假 home 下会生成 .dsh-skins/server.token）。
+    # 不隔离的话，跑一次测试就会在真实 ~/.dsh-skins 下留下副产物 —— 那正是
+    # 本项目踩过的「多根并存」来源之一。每套测试给一个独立子目录，避免互相干扰。
+    sandbox = os.path.join(tempfile.gettempdir(), 'dshpp-tests')
+    shutil.rmtree(sandbox, ignore_errors=True)
+
     passed, failed = [], []
     t0 = time.time()
     for name in tests:
         path = os.path.join(HERE, name)
+        case_root = os.path.join(sandbox, name[:-3])
+        os.makedirs(case_root, exist_ok=True)
+        child_env['DSH_SKIN_ROOT'] = case_root
         t = time.time()
         proc = subprocess.run([py, path], cwd=ROOT,
                               capture_output=not verbose, text=True,

@@ -34,6 +34,11 @@ CONFIG_VERSION = 1
 # RLock 允许同一线程在 update_config 内嵌套调用 load/save。
 _CONFIG_LOCK = threading.RLock()
 
+def _default_skin_root():
+    """约定俗成的默认数据根：`~/.dsh-skins`。"""
+    return os.path.join(os.path.expanduser('~'), '.dsh-skins')
+
+
 # 皮肤/插件/运行态数据根（dsh++ 沿用旧名 dsh-skin 至今）。
 # 解析优先级：
 #   1) 环境变量 DSH_SKIN_ROOT
@@ -45,7 +50,7 @@ def _resolve_skin_root():
     env = os.environ.get('DSH_SKIN_ROOT')
     if env:
         return env
-    default = os.path.join(os.path.expanduser('~'), '.dsh-skins')
+    default = _default_skin_root()
     try:
         with open(os.path.join(default, 'config.json'), encoding='utf-8') as f:
             pointer = (json.load(f) or {}).get('skin_root')
@@ -54,6 +59,184 @@ def _resolve_skin_root():
     except (OSError, ValueError):
         pass
     return default
+
+
+#: 皮肤根指针文件的位置。提成模块级名字有两个好处：① 测试可桩掉，以便验证
+#: 「指针与生效根不一致」这条告警（否则它会去读本机真实的指针文件）；
+#: ② 排查时可临时覆盖。
+POINTER_CONFIG = os.path.join(_default_skin_root(), 'config.json')
+
+
+def _registry_env():
+    """读 Windows 用户作用域环境变量（HKCU\\Environment）。
+
+    为什么不直接用 os.environ：进程继承的值可能落后于注册表 —— 改过环境变量但
+    当前会话是旧的时候两者不一致，而**注册表的值才是下次启动真正生效的**。
+    非 Windows 或读取失败时返回 {}。
+    """
+    if os.name != 'nt':
+        return {}
+    try:
+        import winreg
+    except ImportError:
+        return {}
+    out = {}
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment') as key:
+            index = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                out[str(name).upper()] = value
+                index += 1
+    except OSError:
+        pass
+    return out
+
+
+#: 判断数据根「最后写入时间」时探测的文件 —— 只看顶层与已知关键文件，不做递归
+#: walk：当前根含 plugins/node_modules（上千文件），递归会明显拖慢体检。
+_ROOT_FRESHNESS_PROBES = ('config.json', 'logs.json', 'desktop.log', 'server.token',
+                          os.path.join('plugins', 'registry.json'))
+
+
+def _dir_freshness(path):
+    """目录最后写入时间（取关键文件 mtime 的最大值）；全不可读返回 0.0。"""
+    best = 0.0
+    for rel in ('',) + _ROOT_FRESHNESS_PROBES:
+        try:
+            best = max(best, os.path.getmtime(os.path.join(path, rel) if rel else path))
+        except OSError:
+            continue
+    return best
+
+
+def discover_skin_roots():
+    """列出本机全部可能的 SKIN_ROOT 候选（去重）。
+
+    来源：生效根 / 默认根（指针载体）/ env DSH_SKIN_ROOT / DSH_HOME 兄弟目录 /
+    盘符浅扫（≤2 层，足以覆盖 `<盘>:\\<父>\\<子>\\.dsh-skins` 这类布局）。
+
+    为什么要这个：「多根并存」是本项目踩过的真实坑（2026-09-21 排查）——
+    根分裂后插件注册表、主题、日志各存一份，症状隐蔽，表现为「某些设置时好时坏」。
+    """
+    found = []
+
+    def add(candidate, origin):
+        if not candidate:
+            return
+        norm = os.path.normpath(candidate)
+        for row in found:
+            if os.path.normcase(row['dir']) == os.path.normcase(norm):
+                row['origins'].append(origin)
+                return
+        found.append({'dir': norm, 'origins': [origin]})
+
+    add(SKIN_ROOT, '生效根')
+    add(_default_skin_root(), '默认根（指针载体）')
+    add(os.environ.get('DSH_SKIN_ROOT'), 'env DSH_SKIN_ROOT')
+    home = _registry_env().get('DSH_HOME') or os.environ.get('DSH_HOME')
+    if home:
+        add(os.path.join(os.path.dirname(os.path.normpath(home)), '.dsh-skins'),
+            'DSH_HOME 兄弟目录')
+    if os.name == 'nt':
+        for drive in 'CDEFG':
+            base = drive + ':\\'
+            if not os.path.isdir(base):
+                continue
+            for suffix in ('*\\.dsh-skins', '*\\*\\.dsh-skins'):
+                for hit in glob.glob(base + suffix):
+                    add(hit, '{0} 盘浅扫'.format(drive))
+    found.sort(key=lambda r: (not os.path.isdir(r['dir']), r['dir'].lower()))
+    return found
+
+
+def skin_root_audit():
+    """数据根一致性审计：生效根 / 指针 / env / 全部候选根及各自活跃度。
+
+    `warnings` 为空即健康。由 `dsh-skin.py doctor` 输出；根分裂时据此立刻发现。
+    """
+    registry_env = _registry_env()
+    pointer_file = POINTER_CONFIG
+    pointer_value = None
+    try:
+        with open(pointer_file, encoding='utf-8') as handle:
+            pointer_value = (json.load(handle) or {}).get('skin_root')
+    except (OSError, ValueError):
+        pointer_value = None
+
+    rows = []
+    for row in discover_skin_roots():
+        path = row['dir']
+        info = dict(row)
+        info['exists'] = os.path.isdir(path)
+        info['active'] = (os.path.normcase(path)
+                          == os.path.normcase(os.path.normpath(SKIN_ROOT)))
+        info['last_write'] = _dir_freshness(path) if info['exists'] else 0.0
+        info['age_days'] = ((time.time() - info['last_write']) / 86400.0
+                            if info['last_write'] else None)
+        cfg = {}
+        if info['exists']:
+            try:
+                with open(os.path.join(path, 'config.json'), encoding='utf-8') as handle:
+                    cfg = json.load(handle) or {}
+            except (OSError, ValueError):
+                cfg = {}
+        info['dsh_home'] = cfg.get('dsh_home')
+        info['themes'] = len(cfg.get('themes') or {})
+        try:
+            with open(os.path.join(path, 'plugins', 'registry.json'),
+                      encoding='utf-8') as handle:
+                info['plugin_count'] = len((json.load(handle) or {}).get('plugins') or {})
+        except (OSError, ValueError):
+            info['plugin_count'] = 0
+        # 「有数据」= 存在 config.json 或插件注册表。只被顺手创建的裸目录
+        # （例如测试留下的 server.token）不算数据根，不参与告警，否则体检全是噪音。
+        info['has_config'] = os.path.isfile(os.path.join(path, 'config.json'))
+        info['has_data'] = bool(info['has_config'] or info['plugin_count'])
+        rows.append(info)
+
+    env_skin = os.environ.get('DSH_SKIN_ROOT') or registry_env.get('DSH_SKIN_ROOT')
+    dsh_home = registry_env.get('DSH_HOME') or os.environ.get('DSH_HOME')
+
+    def _same(a, b):
+        return (a and b
+                and os.path.normcase(os.path.normpath(a))
+                == os.path.normcase(os.path.normpath(b)))
+
+    warnings = []
+    if env_skin and not _same(env_skin, SKIN_ROOT):
+        warnings.append('env DSH_SKIN_ROOT（{0}）与生效根不一致 —— 下次启动会切过去'
+                        .format(env_skin))
+    if pointer_value and not _same(pointer_value, SKIN_ROOT):
+        warnings.append('指针 {0} 与生效根不一致'.format(pointer_value))
+    if dsh_home and not os.path.isdir(dsh_home):
+        warnings.append('DSH_HOME（{0}）不存在'.format(dsh_home))
+    try:
+        configured_home = (load_config() or {}).get('dsh_home')
+    except Exception:
+        configured_home = None
+    if configured_home and dsh_home and not _same(configured_home, dsh_home):
+        warnings.append('config.dsh_home（{0}）与 env DSH_HOME（{1}）不一致'
+                        .format(configured_home, dsh_home))
+    for row in rows:
+        if row['active'] or not row['exists'] or not row['has_data']:
+            continue
+        if row['age_days'] is not None and row['age_days'] > 2:
+            warnings.append('存在长期未写入的其它数据根：{0}（{1:.0f} 天前最后写入，'
+                            '插件记录 {2} 条）'.format(row['dir'], row['age_days'],
+                                                     row['plugin_count']))
+
+    return {
+        'active': SKIN_ROOT,
+        'pointer': {'file': pointer_file, 'value': pointer_value},
+        'env': {'DSH_SKIN_ROOT': env_skin, 'DSH_HOME': dsh_home},
+        'config_dsh_home': configured_home,
+        'candidates': rows,
+        'warnings': warnings,
+    }
 
 
 SKIN_ROOT = _resolve_skin_root()

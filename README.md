@@ -125,8 +125,8 @@ DSH++ 可打包成**真正意义上的桌面应用**：独立窗口（WebView2 �
 - **运行形态**：独立窗口（pywebview/WebView2，原生窗口、可调大小、关窗最小化到托盘）；
   缺失 pywebview 时自动降级为 Edge `--app` 独立应用窗口；再缺失才用默认浏览器。
 - **单实例**：重复双击只会唤起已有窗口（Windows 命名互斥 + 后端 `/api/desktop-activate` 激活钩子）。
-- **数据**：与面板完全共用 `~/.dsh-skins/`，增强/会话/凭证/插件/日志（`desktop.log`）不因打包改变；
-  后端仍是 127.0.0.1:8765 + token 鉴权。
+- **数据**：与面板完全共用同一个**工作数据根**（见「路径自适应」），增强/会话/凭证/插件/日志
+  （`desktop.log`）不因打包改变；后端仍是 127.0.0.1:8765 + token 鉴权。
 - **与浏览器面板的关系**：同一后端、同一数据；`启动面板.bat`（浏览器）与 `DSH++.exe`（窗口）可共存
   （端口探测自动复用），日常用桌面应用即可。
 - **托盘**：右键快速「打开面板 / 立即注入增强 / 还原官方样式 / 开机自启 / 退出」。
@@ -399,7 +399,8 @@ logs.json        操作日志（上限 200 条）
 - **启动模式**：`config.json.launcher_mode`（`dev` / `packaged`；旧值 `auto`/`cmd`/`direct` 视为 dev）
 - **Harness 根目录**：`config.json.dsh_root` > 环境变量 `DSH_SKIN_HARNESS_ROOT` > 常见位置扫描 > 默认 `D:\DSH\deepseek-harness`
 - **打包版 exe**：`config.json.desktop_exe` > 环境变量 `DSH_SKIN_DESKTOP_EXE` > 打包产出目录扫描（`targets/*/unsigned-artifacts/win-unpacked/`）
-- **DSH 数据根**：`config.json.dsh_home` > `DSH_HOME` > 默认（dev=仓库 `development/home`；packaged=`~\.dsh`）
+- **DSH 数据根**（会话/凭证所在）：`config.json.dsh_home` > `DSH_HOME` > 默认（dev=仓库 `development/home`；packaged=`~\.dsh`）
+- **DSH++ 工作数据根**（`server.token`/增强/插件注册表/日志）：环境变量 `DSH_SKIN_ROOT` > `~\.dsh-skins\config.json` 的 `skin_root` 指针 > 默认 `~\.dsh-skins`
 - **CDP 端口**：`config.json.cdp_port` > 环境变量 `DSH_SKIN_CDP_PORT` > 默认 9222
 - **Node / pnpm**：环境变量 `DSH_SKIN_NODE` / `DSH_SKIN_PNPM` > corepack 路径 > PATH 扫描（Node 需 ≥22）
 
@@ -449,6 +450,14 @@ desktopProject/desktopPatch 字段会显示当前模式实际写入的目标。
 
 **DeepSeek Harness 升级后界面变回原样？**
 跑一次 `python dsh-skin.py doctor`，按提示 `probe --apply` 即可。
+
+**设置时好时坏 / 换了盘符后像是「丢配置」？**
+先看数据根有没有分裂。DSH++ 的工作数据（`server.token`、增强脚本、插件注册表、日志）都放在
+**工作数据根**下；换盘符、手工设过 `DSH_SKIN_ROOT`、或早期版本留下的旧目录，都可能让同一台机器上
+存在第二份根，导致插件注册表 / 主题各存一份——症状很隐蔽，表现为「某些设置时好时坏」。
+`python dsh-skin.py doctor` 末尾的 `[7/7] 数据根一致性` 会列出生效根、指针、环境变量与其它候选根
+（含最后写入时间、插件记录数、主题数），不一致时给出告警。
+本工具**只报告不清理**——确认旧根没有独有的数据后自行删除（删除属破坏性操作）。
 
 **全局 pnpm 启动崩（Node v20）？**
 用 `启动DeepSeekHarness.bat` 或面板启动，内部已自动切换到 corepack pnpm + Node 22+。

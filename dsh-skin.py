@@ -300,7 +300,7 @@ def doctor():
     print('=== DSH++ {0} 体检 ==='.format(r['version']))
     prod = env.get('product') or 'DeepSeek Harness'
 
-    print('\n[1/6] 环境')
+    print('\n[1/7] 环境')
     print('  目标壳: {0}'.format(prod))
     print('  启动模式: {0}'.format(env['launcher_mode']))
     if env['launcher_mode'] == 'packaged':
@@ -325,11 +325,11 @@ def doctor():
     else:
         print('  启动脚本: 全部 OK（CRLF 行尾）')
 
-    print('\n[2/6] 依赖')
+    print('\n[2/7] 依赖')
     print('  websocket-client: {0}'.format(
         'OK' if r['deps']['websocket'] else '缺失 → CDP 通道不可用（dsh-skin.py deps --install）'))
 
-    print('\n[3/6] CDP 通道')
+    print('\n[3/7] CDP 通道')
     print('  依赖: {0}   端口 {1}: {2}'.format(
         '有' if cdp['available'] else '缺失', cdp['port'],
         '有 target' if cdp['target'] else '无 target'))
@@ -344,7 +344,7 @@ def doctor():
     if not env['running'] and not env['cdp_ready']:
         print('  桌面版未运行 → 先双击「启动DeepSeekHarness.bat」')
 
-    print('\n[4/6] 选择器健康（CDP 实测）')
+    print('\n[4/7] 选择器健康（CDP 实测）')
     if not r['selectors']:
         print('  （无 CDP target，无法实测；启动桌面版后重试）')
     for s in r['selectors']:
@@ -354,7 +354,7 @@ def doctor():
         print('  [!] 有区域选择器失效，建议运行 `python dsh-skin.py probe --apply` 重新适配')
 
     enh = r.get('enhance') or {}
-    print('\n[5/6] 增强器')
+    print('\n[5/7] 增强器')
     print('  总开关: {0}   运行时 v{1}'.format(
         '开' if enh.get('enabled') else '关', enh.get('runtime_version', '?')))
     on = [m['label'] for m in enh.get('modules', []) if m.get('enabled')]
@@ -362,7 +362,7 @@ def doctor():
     print('  用户脚本: {0} 个 / 用户 CSS: {1} 个'.format(
         len(enh.get('scripts', [])), len(enh.get('styles', []))))
 
-    print('\n[6/6] 动态壁纸')
+    print('\n[6/7] 动态壁纸')
     # 读取侧：本机磁盘扫描（纯文件系统，**不需要 DSH 运行**）
     try:
         import we_scanner
@@ -400,6 +400,38 @@ def doctor():
             print('  [i] 未检测到该插件 → 只能浏览本机壁纸，无法应用到 DSH')
     except Exception as e:
         print('  [!] 读取壁纸插件状态失败: {0}'.format(e))
+
+    print('\n[7/7] 数据根一致性')
+    try:
+        audit = dsh_env.skin_root_audit()
+        print('  生效根: {0}'.format(audit['active']))
+        if audit['pointer']['value']:
+            print('  指针  : {0}'.format(audit['pointer']['value']))
+        envirs = audit['env']
+        print('  env   : DSH_HOME={0}   DSH_SKIN_ROOT={1}'.format(
+            envirs.get('DSH_HOME') or '（未设置）',
+            envirs.get('DSH_SKIN_ROOT') or '（未设置）'))
+        others = [row for row in audit['candidates']
+                  if not row['active'] and row['has_data']]
+        if others:
+            print('  其它数据根: {0} 个（均非活跃）'.format(len(others)))
+            for row in others:
+                age = ('{0:.0f} 天前'.format(row['age_days'])
+                       if row['age_days'] is not None else '时间未知')
+                print('    · {0}'.format(row['dir']))
+                print('      最后写入 {0} · 插件记录 {1} 条 · 主题 {2} 个{3}'.format(
+                    age, row['plugin_count'], row['themes'],
+                    ' · 缺 dsh_home 指针' if not row['dsh_home'] else ''))
+        if audit['warnings']:
+            for w in audit['warnings']:
+                print('  [!] {0}'.format(w))
+            print('  [i] 数据根分裂会让插件注册表 / 主题 / 日志各存一份，症状隐蔽')
+            print('      （表现为「某些设置时好时坏」）。确认旧根无独有数据后可自行删除；')
+            print('      本工具不代为清理 —— 删除属破坏性操作，须你明确确认。')
+        else:
+            print('  [OK] 数据根唯一，指针与 env 一致')
+    except Exception as e:
+        print('  [!] 数据根审计失败: {0}'.format(e))
 
     print('\n=== 体检结束 ===')
     return r
